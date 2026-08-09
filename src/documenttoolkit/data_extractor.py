@@ -16,16 +16,14 @@ def extract_titular(texto):
             titular = line
             return titular
         return ""
-def extract_titular(texto): # Prueba Busquedda Titular
+
+def extract_titular(texto):
     lines = texto.splitlines()
 
     for i, line in enumerate(lines):
-        if "MANUEL IGNACIO DEL REY CARRAL" in line:
-            print("Encontrado en posición:", i)
-            print("Línea:", line)
-            print("Línea anterior:", lines[i-1])
-            print("Líneas despues:", lines[i+2])
-
+        if "Titular de la tarjeta" in line:
+            if i + 1 < len(lines):
+                return lines[i + 1].strip()
     return ""
 
 def extract_data(texto, tipo_documento):
