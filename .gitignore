@@ -1,0 +1,27 @@
+# Entorno virtual
+
+.venv/
+
+# Caché de Python
+
+__pycache__/
+*.pyc
+
+# Archivos de VS Code
+
+.vscode/
+
+# Archivos temporales de macOS
+
+.DS_Store
+
+# Copias de seguridad de Linux
+
+*~
+
+# Datos usados y generados por el programa asi como archivos temporales
+
+data/input/*
+data/output/*
+tmp/
+*.png
