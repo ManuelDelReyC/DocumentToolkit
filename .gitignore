@@ -25,3 +25,6 @@ data/input/*
 data/output/*
 tmp/
 *.png
+
+# Metadatos generados por setuptools
+*.egg-info/
