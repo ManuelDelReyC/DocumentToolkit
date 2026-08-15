@@ -28,3 +28,6 @@ tmp/
 
 # Metadatos generados por setuptools
 *.egg-info/
+
+# Fichero de Test Especial
+test_manu.py
