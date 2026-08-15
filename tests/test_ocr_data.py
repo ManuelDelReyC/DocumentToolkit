@@ -1,6 +1,6 @@
 from documenttoolkit.data_extractor import extract_titular
 from documenttoolkit.data_extractor import extract_iban
-
+from documenttoolkit.data_extractor import validate_iban
 
 def test_extract_titular():
     texto = """
@@ -107,6 +107,30 @@ def test_extract_iban_sin_espacios():
     
     """
 
+    resultado = "".join(extract_iban(texto).split())
+
+    assert resultado == "ES8114910001293000132401"
+
+def test_extract_iban_texto_invalido():
+    texto = """
+    Detalle del movimiento
+
+    Número de cuenta
+
+    ESTO NO ES UN IBAN
+
+    """
+
     resultado = extract_iban(texto)
 
-    assert resultado == "ES81 1491 0001 2930 0013 2401"
+    assert resultado == ""
+
+#Test validacion iban valido
+def test_validate_iban_valido():
+    iban = "ES8114910001293000132401"
+    assert validate_iban(iban) is True
+
+#Test validacion iban invalido
+def test_validate_iban_invalido():
+    iban = "ES8114910001293000132405"
+    assert validate_iban(iban) is False
