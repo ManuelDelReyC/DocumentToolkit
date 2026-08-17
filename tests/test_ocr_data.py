@@ -1,6 +1,7 @@
 from documenttoolkit.data_extractor import extract_titular
 from documenttoolkit.data_extractor import extract_iban
 from documenttoolkit.data_extractor import validate_iban
+from documenttoolkit.data_extractor import validate_ccc
 
 def test_extract_titular():
     texto = """
@@ -134,3 +135,13 @@ def test_validate_iban_valido():
 def test_validate_iban_invalido():
     iban = "ES8114910001293000132405"
     assert validate_iban(iban) is False
+
+#Test validacion con Cuenta Corriente Valida
+def test_validate_ccc_valido():
+    ccc = "14910001293000132401"
+    assert validate_ccc(ccc) is True
+
+#Test validacion con Cuenta Corriente Invalida
+def test_validate_ccc_invalido():
+    ccc = "14910001293000132402"
+    assert validate_ccc(ccc) is False
