@@ -32,6 +32,6 @@ tmp/
 # Fichero de Test Especial
 test_manu.py
 
-# Contexto Asistente de IA
-llm_context
-2026.08.26 qwen3:4b.md
+# Modelos de IA
+*.gguf
+*.gguf.part
