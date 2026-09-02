@@ -8,5 +8,19 @@ version = "0.1.0"
 description = "Herramienta para escaneo, OCR, clasificación y extracción de datos de documentos"
 requires-python = ">=3.12"
 
+dependencies = [
+    "pdfplumber",
+    "pytesseract",
+    "pdf2image",
+    "pillow",
+    "faster-whisper",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+

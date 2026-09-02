@@ -6,6 +6,8 @@ from .enriched_extractor import extract_data_enriched
 from .ocr_reader import extract_text_ocr
 from pathlib import Path
 from .database import DocumentDatabase
+from documenttoolkit.video_transcriber import VideoTranscriber, transcribir_y_guardar
+from documenttoolkit.config import DB_PATH, INPUT_VIDEO_DIR
 
 
 if __name__ == "__main__":
@@ -65,3 +67,22 @@ for documento in documentos:
         datos_dict=datos
     )
     print("💾 Guardado en base de datos.")
+
+# ========== BUCLE DE VIDEOS (nuevo, al final) ==========
+videos = list(INPUT_VIDEO_DIR.glob("*.mp4")) + \
+         list(INPUT_VIDEO_DIR.glob("*.mp3")) + \
+         list(INPUT_VIDEO_DIR.glob("*.wav")) + \
+         list(INPUT_VIDEO_DIR.glob("*.m4a")) + \
+         list(INPUT_VIDEO_DIR.glob("*.avi")) + \
+         list(INPUT_VIDEO_DIR.glob("*.mov"))
+
+if videos:
+    print(f"\n🎬 {len(videos)} video(s)/audio(s) encontrado(s).")
+    transcriber = VideoTranscriber()
+    for video in videos:
+        if db.documento_existe(str(video.resolve())):
+            print(f"⏩ Ya procesado: {video.name}")
+            continue
+        transcribir_y_guardar(video, db, transcriber)
+else:
+    print("\n🎬 No hay videos/audios en data/input/videos/")
