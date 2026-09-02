@@ -1,8 +1,8 @@
-from .scanner import scan_documents
-from .pdf_reader import extract_text
-from .classifier import classify_document
-from .data_extractor import extract_data
-from .ocr_reader import extract_text_ocr
+from scanner import scan_documents
+from pdf_reader import extract_text
+from classifier import classify_document
+from data_extractor import extract_data
+from ocr_reader import extract_text_ocr
 
 documentos = scan_documents()
 for documento in documentos:
