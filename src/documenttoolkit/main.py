@@ -1,9 +1,20 @@
+from documenttoolkit.llm_client import LLMClient
 from .scanner import scan_documents
 from .pdf_reader import extract_text
 from .classifier import classify_document
-from .data_extractor import extract_data
+from .enriched_extractor import extract_data_enriched
 from .ocr_reader import extract_text_ocr
 
+if __name__ == "__main__":
+    # Aviso informativo sobre el LLM
+    llm = LLMClient()
+    if not llm.is_available():
+        print("⚠️  AVISO: llama.cpp server no está corriendo en localhost:8080")
+        print("   Los resultados NO tendrán enriquecimiento LLM.")
+        print("   Para activarlo: ./scripts/start_llm_server.sh\n")
+    else:
+        print("✅ LLM local conectado (localhost:8080)\n")
+        
 documentos = scan_documents()
 for documento in documentos:
     print("\n==============================")
@@ -23,5 +34,5 @@ for documento in documentos:
 
     clase = classify_document(texto)
     print(clase)
-    datos = extract_data(texto, clase)
+    datos = extract_data_enriched(texto, clase)
     print(datos)

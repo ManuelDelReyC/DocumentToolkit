@@ -30,8 +30,11 @@ def extract_ccc(texto, iban):
     texto_sin_espacios = "".join(texto.split())
     if iban:
         return ""
-    ccc = re.search(r"\d{20}", texto_sin_espacios).group()
-    return ccc
+    match = re.search(r"\d{20}", texto_sin_espacios)
+    if match:
+        ccc = match.group()
+        return ccc
+    return ""
 
 def suma_ponderada_ccc(cadena):
     pesos = [1, 2, 4, 8, 5, 10, 9, 7, 3, 6]
@@ -63,7 +66,7 @@ def validate_ccc(ccc):
             digito_control = digito_control + str(suma_ponderada_ccc(cadena))
         return control == digito_control
     else:
-        False
+        return False
 
 def extract_titular(texto):
     lines = texto.splitlines()
@@ -75,17 +78,6 @@ def extract_titular(texto):
 
                 if siguiente_linea:
                     return siguiente_linea
-
-    return ""
-
-def extract_titular(texto):
-    lines = texto.splitlines()
-
-    for i, line in enumerate(lines):
-        if "Titular de la tarjeta" in line:
-            for siguiente_linea in lines[i + 1:]:
-                if siguiente_linea.strip():
-                    return siguiente_linea.strip()
 
     return ""
 
