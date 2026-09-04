@@ -2,7 +2,7 @@
 # Script Inicio llama.cpp optimizado para HP Elitedesk 600 G4 + GTX 1060 3GB
 
 MODELO="$HOME/Proyectos/llama/models/qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf"
-NGL="${1:-12}"
+NGL="${1:-13}"
 CTX="${2:-6144}"
 
 # Verifica que el modelo existe
