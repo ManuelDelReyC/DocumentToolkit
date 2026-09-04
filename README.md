@@ -701,3 +701,73 @@ El proyecto combina tres objetivos:
 3. **Crear una base que permita incorporar técnicas más avanzadas cuando sean necesarias.**
 
 La evolución prevista es deliberadamente incremental: primero extracción y validación determinista; posteriormente normalización, clasificación y extracción de información más compleja; y finalmente, si aporta valor, técnicas de OCR/visión/NLP más avanzadas.
+
+____________________________________________________________________________________________
+
+# INTRUCCIONES DE USO
+
+
+## Iniciar Entorno Virtual
+
+source .venv/bin/activate
+
+
+## Iniciar Cliente llama.cpp
+
+### Con Script
+
+cd ~/Proyectos/DocumentToolkit    # o donde tengas la carpeta
+
+chmod +x start_llm_server.sh      # ← CORRECCIÓN: +x, no -x
+
+./start_llm_server.sh             # ← Ejecutar con ./
+
+
+### Sin Script
+
+"$HOME/Proyectos/llama/src/llama.cpp/build/bin/llama-server" \
+  -m "$HOME/Proyectos/llama/models/qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf" \
+  -ngl 12 -c 6144 --host 127.0.0.1 --port 8080
+
+
+## Terminar cliente llama.cpp
+
+Desde otro terminal ejecutar:
+
+  kill -15 $(pgrep -f "llama-server")
+
+### Error de Memoria al Iniciar llama.cpp
+
+Si da error de memoria revisar RAM. Si > 476 MB entonces 
+
+1) Estas usando la entrada de Video de la Tarjeta Grafica --> Cambiar fuera de Tarjeta
+
+2) Hay basura
+Se comprueba con: 
+
+  nvidia-smi
+
+Para limpiar restos de la ejecucion anterior ejecutar:
+
+  kill -9 <PID>
+
+Si no hubiera procesos visibles probar:
+
+  sudo nvidia-smi --gpu-reset -i 0
+
+
+## GIT Steps
+
+git status
+
+git add .
+
+git commit -m "TU MENSAJE"
+
+git push
+
+## Ejecutar Prorgama
+
+### Módulo
+
+python -m documenttoolkit.main
