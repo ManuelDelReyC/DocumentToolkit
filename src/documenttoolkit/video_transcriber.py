@@ -15,7 +15,7 @@ class VideoTranscriber:
     Modelos: "base" (~500MB, rápido), "small" (~900MB, equilibrado), "medium" (~1.5GB, lento).
     """
 
-    def __init__(self, model_size: str = "small"):
+    def __init__(self, model_size: str = "medium"):
         print(f"🔄 Cargando Whisper '{model_size}' en CPU (descarga inicial ~900 MB)...")
         self.model = WhisperModel(
             model_size,
