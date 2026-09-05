@@ -1,742 +1,273 @@
 # DocumentToolkit
 
-Herramienta en Python para la **extracción, normalización y validación de información procedente de documentos**, especialmente documentos bancarios y otros documentos PDF que pueden contener texto directamente o requerir OCR.
+Herramienta en Python para la **extracción, clasificación, enriquecimiento y persistencia de información procedente de documentos heterogéneos**: PDFs bancarios y judiciales, imágenes escaneadas (OCR), y archivos de audio/video transcritos localmente.
 
-El proyecto nace como un ejercicio práctico para aprender y consolidar conocimientos de Python, procesamiento de documentos, expresiones regulares, testing, estructura de paquetes y, progresivamente, técnicas más avanzadas de extracción de información.
+El proyecto nace como ejercicio práctico para aprender Python, procesamiento de documentos, expresiones regulares, testing, empaquetado con `pyproject.toml`, control de versiones con Git, e integración progresiva de **Inteligencia Artificial local** (sin costes de API ni dependencias de terceros en la nube).
 
-## Objetivo
+---
 
-La idea a medio/largo plazo es construir una herramienta capaz de recibir documentos heterogéneos y convertirlos en **datos estructurados y reutilizables**.
+## ✨ Características actuales
 
-Por ejemplo, a partir de un extracto bancario:
+### 📄 Procesamiento de documentos
+- **Extracción de texto** de PDFs con texto nativo.
+- **OCR automático** para PDFs escaneados e imágenes (Tesseract).
+- **Detección inteligente**: decide automáticamente si un PDF necesita OCR.
+- **Extracción determinista** de datos bancarios: IBAN, CCC, titular.
+- **Validación matemática** de IBAN (módulo 97) y CCC (dígitos de control).
 
-```text
-PDF / Imagen
-     │
-     ▼
-Extracción de texto / OCR
-     │
-     ▼
-Análisis del contenido
-     │
-     ├── Tipo de documento
-     ├── IBAN
-     ├── CCC
-     ├── Titular
-     ├── Fechas
-     ├── Importes
-     ├── Conceptos
-     └── Otros datos
-     │
-     ▼
-Validación y normalización
-     │
-     ▼
-Diccionario / JSON / datos estructurados
+### 🏷️ Clasificación inteligente
+- **Clasificación híbrida**: reglas deterministas rápidas + fallback a **LLM local** (llama.cpp) cuando las reglas no coinciden.
+- Dominios soportados: bancario (`EXTRACTO_BANCARIO`, `MOVIMIENTO_BANCARIO`, `TRANSFERENCIA_BANCARIA`, `NÓMINA`...) y judicial (`ESCRITO_JUDICIAL`, `SENTENCIA`, `AUTO`, `CONTRATO`).
+
+### 🧠 Enriquecimiento con IA local
+- Integración nativa con **llama.cpp server** (localhost:8080).
+- Modelos probados: Qwen 2.5 Coder 7B, Mistral 7B, Phi-4 Mini.
+- **Extracción de entidades** estructuradas por el LLM (titular, entidad, periodo, partes judiciales, etc.).
+- **Corrección de IBANs inválidos** detectando errores tipográficos de OCR (O→0, espacios, etc.).
+- Funcionamiento **degradado**: si el servidor LLM no está activo, todo el pipeline sigue operativo con extracción puramente determinista.
+
+### 🎬 Transcripción de audio y video
+- Transcripción local con **Faster-Whisper** (CPU, optimizado `int8`).
+- Soporta: `mp4`, `mp3`, `wav`, `m4a`, `avi`, `mov`, `mkv`, `ogg`.
+- El texto transcrito se procesa con el **mismo pipeline** que los PDFs: clasificación, extracción y guardado en base de datos.
+
+### 🗄️ Persistencia y consultas
+- **SQLite local** (`data/output/docs.db`) para evitar reprocesar archivos.
+- **Herramienta de consulta** (`query_tool.py`) desde terminal:
+  - `listar`, `buscar`, `ver`, `stats`, `exportar`.
+- Visualización directa con cualquier cliente SQL (HeidiSQL, DBeaver, sqlite3 CLI).
+
+### 🧪 Calidad de código
+- Tests automatizados con `pytest`.
+- Estructura `src/` empaquetable.
+- Instalación editable: `pip install -e .`.
+- Dependencias declaradas en `pyproject.toml`.
+
+---
+
+## 🏗️ Arquitectura
+```
+data/input/
+├── pdf/              → PDFs e imágenes
+└── videos/           → Audio y video
+               ↓
+┌──────────────────────────────────────────────┐
+│  Ingestores (pdf_reader / video_transcriber) │
+└──────────────────────────────────────────────┘
+               ↓
+          Texto plano
+               ↓
+┌──────────────────────────────────────────────┐
+│  Clasificación híbrida                       │
+│  ├── Reglas deterministas (regex, keywords)  │
+│  └── Fallback LLM (llama.cpp local)          │
+└──────────────────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────┐
+│  Extracción de datos                         │
+│  ├── Determinista (IBAN, CCC, titular, DNI)  │
+│  └── Enriquecida con LLM (entidades,         │
+│      correcciones, metadatos judiciales)     │
+└──────────────────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────┐
+│  SQLite (docs.db)                            │
+│  └── Evita reprocesar archivos ya indexados  │
+└──────────────────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────┐
+│  Query Tool (listar, buscar, exportar...)    │
+└──────────────────────────────────────────────┘
 ```
 
-El objetivo final no es simplemente "sacar texto" de un PDF, sino **entender parcialmente qué contiene el documento y convertirlo en información estructurada**.
+---
+
+## 🛠️ Stack tecnológico
+
+| Componente | Tecnología | Notas |
+|------------|-----------|-------|
+| Lenguaje | Python 3.12+ | |
+| Extracción PDF | `pdfplumber` | Texto nativo |
+| OCR | `pytesseract` + `pdf2image` | Imágenes y PDFs escaneados |
+| Transcripción | `faster-whisper` | CPU, modelos `small`/`base` |
+| IA Local | `llama.cpp` (servidor) | Via API OpenAI-compatible |
+| Cliente LLM | `urllib` nativo | Sin dependencias pesadas |
+| Base de datos | `sqlite3` (stdlib) | Sin instalación adicional |
+| Tests | `pytest` | |
+| Empaquetado | `setuptools` + `pyproject.toml` | Modo editable |
 
 ---
 
-## Estado actual
+## 📁 Estructura del proyecto
 
-El proyecto se encuentra en una fase inicial pero funcional.
-
-Actualmente se dispone de:
-
-* Extracción de texto de documentos PDF.
-* Detección de documentos que no contienen texto y utilización de OCR.
-* Clasificación inicial del tipo de documento.
-* Extracción de IBAN.
-* Normalización básica del IBAN.
-* Validación matemática del IBAN.
-* Extracción de CCC.
-* Validación matemática del CCC.
-* Extracción inicial del titular en determinados documentos.
-* Tests automatizados con `pytest`.
-* Estructura de proyecto basada en `src/`.
-* Configuración mediante `pyproject.toml`.
-* Control de versiones mediante Git.
-
-El proyecto todavía está lejos de ser un extractor documental general. Las funciones actuales son deliberadamente sencillas y están orientadas a construir progresivamente una base sólida.
-
----
-
-## Estructura del proyecto
-
-Actualmente se utiliza una estructura basada en `src`, habitual en proyectos Python empaquetables:
-
-```text
 DocumentToolkit/
-│
-├── .gitignore
+```
+├── data/
+│   ├── input/
+│   │   ├── pdf/
+│   │   └── videos/
+│   └── output/
+│       └── docs.db
+├── scripts/
+│   └── start_llm_server.sh
+├── src/documenttoolkit/
+│   ├── init.py
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── scanner.py
+│   ├── pdf_reader.py
+│   ├── ocr_reader.py
+│   ├── classifier.py
+│   ├── data_extractor.py
+│   ├── extractores.py
+│   ├── enriched_extractor.py
+│   ├── llm_client.py
+│   ├── llm_extractor.py
+│   ├── video_transcriber.py
+│   └── query_tool.py
+├── tests/
+│   ├── test_ocr_data.py
+│   ├── test_llm_integration.py
+│   └── test_video.py
 ├── pyproject.toml
 ├── README.md
-│
-├── src/
-│   └── documenttoolkit/
-│       ├── __init__.py
-│       ├── main.py
-│       ├── scanner.py
-│       └── data_extractor.py
-│
-└── tests/
-    └── test_ocr_data.py
+└── .gitignore
 ```
-
-El código de la aplicación se encuentra dentro de `src/documenttoolkit/`, mientras que los tests permanecen separados en `tests/`.
-
-Esta organización ayuda a evitar determinados problemas de importación y hace que el proyecto se comporte de forma más parecida a un paquete Python real.
 
 ---
 
-## Entorno de desarrollo
+## 🚀 Instalación
 
-El proyecto utiliza un entorno virtual Python.
 
-Activación:
+**Clonar**
+```
+bash
 
-```bash
+git clone https://github.com/ManuelDelReyC/DocumentToolkit.git
+
+cd DocumentToolkit
+```
+
+**Entorno virtual**
+```python -m venv .venv
 source .venv/bin/activate
 ```
 
-Comprobar el Python utilizado:
-
-```bash
-which python
+**Instalación editable con dependencias**
 ```
-
-Instalación del proyecto en modo editable:
-
-```bash
 pip install -e .
 ```
+## Requisitos del sistema
 
-El modo editable permite trabajar sobre el código de `src/` sin tener que reinstalar el paquete después de cada modificación.
+    Python 3.12+
+    Tesseract OCR (apt install tesseract-ocr tesseract-ocr-spa en Ubuntu)
+    llama.cpp compilado con soporte CUDA (si dispones de GPU) o CPU.
+    Poppler (apt install poppler-utils) para pdf2image.
 
+## ▶️ Uso
+
+1. Procesar documentos (PDFs + Videos)
+
+   Opcional: arrancar el servidor LLM para enriquecimiento:
+   `./scripts/start_llm_server.sh`
+
+   Ejecutar el pipeline:
+
+   `python -m documenttoolkit.main`
+
+   La primera vez procesa todo. Las siguientes, salta archivos ya indexados en la base de datos.
+
+2. Consultar la base de datos
+```
+   # Estadísticas generales
+   python -m documenttoolkit.query_tool stats
+
+   # Listar últimos documentos
+   python -m documenttoolkit.query_tool listar
+
+   # Buscar palabra en todo el texto
+   python -m documenttoolkit.query_tool buscar "pensión"
+
+   # Ver detalle de un documento
+   python -m documenttoolkit.query_tool ver "nombre_del_archivo.pdf"
+
+   # Exportar a JSON
+   python -m documenttoolkit.query_tool exportar data/output/resumen.json
+
+   3. Transcribir un video de forma aislada
+
+   python tests/test_video.py
+   (Ajusta la ruta del video en el script antes de ejecutar.)
+
+
+🧠 Filosofía de desarrollo
+
+El proyecto se construye de forma incremental y deliberada:
+
+    Determinista antes que mágico: las extracciones de IBAN, CCC y clasificación por reglas son rápidas, testeables y gratuitas. El LLM actúa como segunda opinión, nunca como reemplazo.
+    Local antes que en la nube: todo el procesamiento (OCR, transcripción, inferencia) ocurre en la máquina local. Sin cuotas, sin latencia de red, sin enviar documentos judiciales o bancarios a terceros.
+    Testeable desde el primer día: cada función nueva va acompañada de tests. Si el LLM no responde, el sistema sigue funcionando.
+    Un solo pipeline para todas las fuentes: PDFs, imágenes escaneadas y videos de juicios convergen en el mismo flujo de texto → clasificación → extracción → base de datos.
+
+
+📌 Roadmap
+
+    [x] Extracción y validación de IBAN/CCC
+    [x] OCR automático con detección de PDFs escaneados
+    [x] Clasificación híbrida (reglas + LLM local)
+    [x] Persistencia SQLite con evitación de reprocesado
+    [x] Transcripción de audio/video con Whisper
+    [x] Herramienta de consulta por terminal
+    [ ] Extractores especializados por dominio (bancario vs. judicial)
+    [ ] Prompts específicos para documentos judiciales (partes, objeto, pretensiones)
+    [ ] Búsqueda semántica con embeddings (ChromaDB/FAISS)
+    [ ] Detección de contradicciones entre documentos
+    [ ] Generación de resúmenes ejecutivos automáticos
+    [ ] Interfaz web (Streamlit/Gradio) para consulta no técnica
+
+
+📄 Licencia
+
+Proyecto personal de aprendizaje. Uso libre para fines educativos y profesionales propios.
+"No basta con que una extracción 'parezca funcionar'; los datos extraídos deben poder validarse."
+```
 ---
 
-## Ejecución
+## INTRUCCIONES DE USO
 
-Debido a que el proyecto utiliza una estructura `src/` y módulos con imports relativos, `main.py` no debe ejecutarse directamente como:
 
-```bash
-python src/documenttoolkit/main.py
+### Iniciar Entorno Virtual
+
+`source .venv/bin/activate`
+
+
+### Iniciar Cliente llama.cpp
+
+#### Con Script
+
+`cd ~/Proyectos/DocumentToolkit`    o donde tengas la carpeta
+
+`chmod +x start_llm_server.sh`      ← CORRECCIÓN: +x, no -x
+
+`./start_llm_server.sh`             ← Ejecutar con ./
+
+
+#### Sin Script
+
 ```
-
-La forma adecuada es ejecutar el módulo:
-
-```bash
-python -m documenttoolkit.main
-```
-
----
-
-## Tests
-
-El proyecto utiliza `pytest`.
-
-Para ejecutar toda la batería:
-
-```bash
-pytest
-```
-
-o:
-
-```bash
-python -m pytest
-```
-
-Los tests se encuentran actualmente en:
-
-```text
-tests/test_ocr_data.py
-```
-
-Una de las decisiones importantes del proyecto ha sido **desarrollar las funciones acompañadas de tests**, en lugar de limitarse a comprobar manualmente que el programa parece funcionar.
-
-Esto permite modificar progresivamente el código manteniendo una comprobación automática de las funcionalidades ya implementadas.
-
----
-
-# Funcionalidades implementadas
-
-## Extracción de IBAN
-
-Se implementó una primera versión de:
-
-```python
-extract_iban(texto)
-```
-
-La función busca una línea que comience por `ES`, ignorando espacios al principio y normalizando los espacios internos para realizar las comprobaciones.
-
-Actualmente se comprueba:
-
-* Que el texto comienza por `ES`.
-* Que la parte numérica es realmente numérica.
-* Que el IBAN español contiene 24 caracteres al eliminar los espacios.
-* Conservación del formato encontrado en el documento.
-
-Ejemplo:
-
-```text
-ES81 1491 0001 2930 0013 2401
-```
-
-También se contempla:
-
-```text
-ES8114910001293000132401
-```
-
-Los tests cubren, entre otros casos:
-
-* IBAN normal.
-* IBAN con espacios delante.
-* IBAN sin espacios.
-* Ausencia de IBAN.
-* Texto que contiene una cadena que comienza por `ES` pero no es un IBAN válido.
-
----
-
-## Validación de IBAN
-
-Se implementó:
-
-```python
-validate_iban(iban)
-```
-
-utilizando el algoritmo estándar de validación mediante módulo 97.
-
-De forma simplificada:
-
-```text
-IBAN
- │
- ├── mover los primeros 4 caracteres al final
- │
- ├── convertir las letras del país a números
- │
- ├── obtener una secuencia numérica
- │
- └── calcular módulo 97
-          │
-          └── resultado == 1 → IBAN válido
-```
-
-Actualmente se prueba tanto un IBAN válido como uno alterado deliberadamente para comprobar que la validación detecta el error.
-
----
-
-## Extracción de CCC
-
-Se añadió:
-
-```python
-extract_ccc(texto, iban)
-```
-
-El CCC español tiene 20 dígitos:
-
-```text
-Entidad Oficina DC Cuenta
-  4      4    2   10
-```
-
-Por ejemplo:
-
-```text
-1491 0001 29 3000132401
-```
-
-La extracción actual busca una secuencia de 20 dígitos cuando el documento no contiene un IBAN.
-
-Esto permite obtener el CCC de documentos antiguos en los que aparece el número de cuenta pero no el IBAN.
-
-### Limitación conocida
-
-Buscar simplemente cualquier secuencia de 20 dígitos puede producir falsos positivos.
-
-Por ejemplo, un documento puede contener:
-
-* números de referencia,
-* identificadores,
-* teléfonos,
-* códigos internos,
-* otras secuencias numéricas.
-
-Por ello, la extracción del CCC deberá mejorar en una fase posterior utilizando el contexto del documento y, especialmente, la validación del CCC.
-
----
-
-## Validación de CCC
-
-Se implementó:
-
-```python
-validate_ccc(ccc)
-```
-
-La validación utiliza los dos dígitos de control del CCC.
-
-La estructura utilizada es:
-
-```text
-Entidad + Oficina + DC + Cuenta
-```
-
-Para calcular los dígitos de control se utilizan los pesos:
-
-```python
-[1, 2, 4, 8, 5, 10, 9, 7, 3, 6]
-```
-
-Se realizan dos cálculos:
-
-```text
-00 + Entidad + Oficina
-```
-
-y:
-
-```text
-Cuenta
-```
-
-Después se obtiene cada dígito de control y se compara con los dos dígitos presentes en el CCC.
-
-Actualmente se prueba tanto un CCC válido como uno modificado para comprobar que la validación falla correctamente.
-
----
-
-# Extracción de datos
-
-Las distintas funciones se integran mediante:
-
-```python
-extract_data(texto, tipo_documento)
-```
-
-que genera un diccionario similar a:
-
-```python
-{
-    "tipo": "...",
-    "num_caracteres": ...,
-    "IBAN": "...",
-    "IBAN_Valido": True,
-    "CCC": "...",
-    "CCC Valido": True,
-    "Titular": "..."
-}
-```
-
-Esto constituye una primera capa de estructuración de la información extraída.
-
-La intención es que esta estructura crezca progresivamente a medida que se incorporen nuevos tipos de documentos y nuevos campos.
-
----
-
-# Titular
-
-Existe una primera implementación de:
-
-```python
-extract_titular(texto)
-```
-
-que busca determinados patrones presentes en documentos bancarios y obtiene la siguiente línea no vacía.
-
-Es una solución todavía muy dependiente del formato concreto del documento.
-
-La extracción del titular deberá evolucionar posteriormente hacia una estrategia más robusta basada en:
-
-* patrones,
-* contexto,
-* distintos formatos bancarios,
-* OCR,
-* expresiones regulares,
-* y posiblemente técnicas de clasificación o NLP.
-
----
-
-# OCR
-
-Una de las características importantes del proyecto es que no todos los PDFs contienen texto directamente.
-
-El flujo contempla:
-
-```text
-PDF
- │
- ├── ¿Contiene texto?
- │       │
- │       ├── Sí → extracción directa
- │       │
- │       └── No → OCR
- │
- ▼
-texto
-```
-
-Esto es especialmente importante para documentos escaneados o PDFs que contienen únicamente imágenes.
-
----
-
-# Decisiones y aprendizajes importantes
-
-Durante el desarrollo se han trabajado varios conceptos fundamentales de Python:
-
-* funciones y parámetros;
-* slicing de strings;
-* `strip()`;
-* `split()`;
-* `join()`;
-* `isdigit()` / `isnumeric()`;
-* `ord()`;
-* conversión entre `str` e `int`;
-* expresiones regulares;
-* módulos e imports;
-* paquetes Python;
-* imports relativos;
-* entornos virtuales;
-* `pyproject.toml`;
-* estructura `src`;
-* `pytest`;
-* assertions;
-* Git;
-* commits y ramas;
-* depuración mediante ejecución real del programa.
-
-También se ha trabajado una idea especialmente importante para el proyecto:
-
-> No basta con que una extracción "parezca funcionar"; los datos extraídos deben poder validarse.
-
-Por eso IBAN y CCC tienen actualmente dos fases diferenciadas:
-
-```text
-EXTRACCIÓN
-    ↓
-¿qué cadena parece ser el dato?
-    ↓
-VALIDACIÓN
-    ↓
-¿esa cadena cumple realmente las reglas del dato?
-```
-
-Esta separación deberá mantenerse en futuras funcionalidades.
-
----
-
-# Próximos objetivos
-
-El proyecto no pretende alcanzar desde el principio un extractor perfecto. La estrategia prevista es evolucionar por capas.
-
-## 1. Mejorar la extracción de CCC
-
-La implementación actual puede producir falsos positivos.
-
-Siguiente paso:
-
-* utilizar el contexto de palabras como `Cuenta`, `Núm. de Cuenta`, `Entidad`, etc.;
-* localizar mejor las secuencias de 20 dígitos;
-* utilizar la validación CCC como filtro;
-* añadir tests específicos para falsos positivos.
-
----
-
-## 2. Mejorar la extracción del titular
-
-La implementación actual funciona para determinados documentos, pero depende demasiado del formato.
-
-Será necesario soportar diferentes estructuras documentales.
-
----
-
-## 3. Extraer información bancaria adicional
-
-Posibles campos:
-
-```text
-Fecha
-Concepto
-Importe
-Saldo
-Referencia
-Número de operación
-Entidad bancaria
-```
-
-Especialmente interesante será poder transformar una tabla de movimientos en una estructura como:
-
-```python
-[
-    {
-        "fecha": "...",
-        "concepto": "...",
-        "importe": ...,
-        "saldo": ...
-    },
-    ...
-]
-```
-
----
-
-## 4. Mejorar el reconocimiento del tipo de documento
-
-Actualmente existe una clasificación inicial.
-
-A futuro podría evolucionar hacia un sistema capaz de distinguir automáticamente:
-
-```text
-HIPOTECA
-EXTRACTO_BANCARIO
-MOVIMIENTO_BANCARIO
-FACTURA
-RECIBO
-NÓMINA
-CONTRATO
-...
-```
-
----
-
-## 5. Crear una capa de normalización
-
-Los documentos reales pueden representar el mismo dato de muchas formas.
-
-Por ejemplo:
-
-```text
-ES81 1491 0001 2930 0013 2401
-ES8114910001293000132401
-ES81 1491 0001 2930 0013 2401
-```
-
-La aplicación debería ser capaz de:
-
-```text
-OCR / texto original
-        ↓
-extracción
-        ↓
-normalización
-        ↓
-validación
-        ↓
-dato estructurado
-```
-
-Esto será especialmente importante cuando se incorporen fechas, importes y nombres.
-
----
-
-# Posible evolución futura
-
-A largo plazo, DocumentToolkit podría convertirse en una herramienta de procesamiento documental más general:
-
-```text
-                    ┌───────────────┐
-                    │ PDF / Imagen  │
-                    └───────┬───────┘
-                            │
-                            ▼
-                  ┌──────────────────┐
-                  │ Texto / OCR      │
-                  └────────┬─────────┘
-                           │
-                           ▼
-                ┌─────────────────────┐
-                │ Clasificación       │
-                │ del documento       │
-                └──────────┬──────────┘
-                           │
-                           ▼
-                ┌─────────────────────┐
-                │ Extracción          │
-                │ de información      │
-                └──────────┬──────────┘
-                           │
-                           ▼
-                ┌─────────────────────┐
-                │ Normalización       │
-                └──────────┬──────────┘
-                           │
-                           ▼
-                ┌─────────────────────┐
-                │ Validación          │
-                └──────────┬──────────┘
-                           │
-                           ▼
-                ┌─────────────────────┐
-                │ Datos estructurados │
-                └─────────────────────┘
-```
-
-En una fase posterior, y si los requisitos lo justifican, se podrán estudiar técnicas más avanzadas:
-
-* NLP;
-* modelos de lenguaje;
-* modelos especializados para documentos;
-* clasificación automática;
-* extracción mediante modelos de visión;
-* procesamiento de tablas;
-* procesamiento de documentos escaneados;
-* aceleración mediante GPU.
-
-La GPU disponible actualmente permitirá explorar este tipo de herramientas cuando el proyecto llegue a ese punto, pero **no es necesario introducirlas prematuramente**. La prioridad sigue siendo construir una base determinista, testeable y comprensible.
-
----
-
-# Filosofía de desarrollo
-
-El proyecto se desarrolla de forma incremental.
-
-La estrategia seguida hasta ahora es:
-
-```text
-Problema pequeño
-     ↓
-Implementación sencilla
-     ↓
-Test
-     ↓
-Encontrar casos límite
-     ↓
-Mejorar implementación
-     ↓
-Nuevo test
-     ↓
-Commit
-```
-
-Se prioriza que cada nueva funcionalidad sea comprensible antes de intentar hacerla excesivamente sofisticada.
-
-Una función sencilla que funciona, está testeada y puede mejorarse posteriormente es preferible a una implementación compleja que no se entiende bien.
-
----
-
-# Estado de Git
-
-El proyecto utiliza Git para conservar los avances.
-
-Antes de realizar cambios importantes:
-
-```bash
-git status
-```
-
-Después de completar una funcionalidad y comprobar los tests:
-
-```bash
-pytest
-```
-
-se recomienda revisar los cambios:
-
-```bash
-git diff
-```
-
-y realizar un commit que represente una unidad lógica de trabajo:
-
-```bash
-git add ...
-git commit -m "Descripción del cambio"
-git push
-```
-
-Los ficheros experimentales que no forman parte del proyecto, como `tests/test_manu.py`, no deben incorporarse al repositorio.
-
----
-
-# Cómo retomar el proyecto
-
-En una nueva sesión:
-
-```bash
-cd ~/Proyectos/DocumentToolkit
-source .venv/bin/activate
-pip install -e .
-pytest
-```
-
-Si los tests pasan, el entorno básico está preparado.
-
-Para ejecutar la aplicación:
-
-```bash
-python -m documenttoolkit.main
-```
-
-Antes de continuar desarrollando conviene comprobar:
-
-```bash
-git status
-```
-
-y:
-
-```bash
-git log --oneline -5
-```
-
----
-
-# Situación actual
-
-DocumentToolkit es todavía un proyecto en desarrollo.
-
-Las funciones actuales no pretenden resolver todos los formatos posibles. Su propósito principal es construir progresivamente una arquitectura capaz de transformar documentos reales en información fiable.
-
-El proyecto combina tres objetivos:
-
-1. **Aprender Python mediante un proyecto real.**
-2. **Construir una herramienta útil de procesamiento documental.**
-3. **Crear una base que permita incorporar técnicas más avanzadas cuando sean necesarias.**
-
-La evolución prevista es deliberadamente incremental: primero extracción y validación determinista; posteriormente normalización, clasificación y extracción de información más compleja; y finalmente, si aporta valor, técnicas de OCR/visión/NLP más avanzadas.
-
-____________________________________________________________________________________________
-
-# INTRUCCIONES DE USO
-
-
-## Iniciar Entorno Virtual
-
-source .venv/bin/activate
-
-
-## Iniciar Cliente llama.cpp
-
-### Con Script
-
-cd ~/Proyectos/DocumentToolkit    # o donde tengas la carpeta
-
-chmod +x start_llm_server.sh      # ← CORRECCIÓN: +x, no -x
-
-./start_llm_server.sh             # ← Ejecutar con ./
-
-
-### Sin Script
-
 "$HOME/Proyectos/llama/src/llama.cpp/build/bin/llama-server" \
   -m "$HOME/Proyectos/llama/models/qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf" \
   -ngl 12 -c 6144 --host 127.0.0.1 --port 8080
+```
 
-
-## Terminar cliente llama.cpp
+### Terminar cliente llama.cpp
 
 Desde otro terminal ejecutar:
 
-  kill -15 $(pgrep -f "llama-server")
+  `kill -15 $(pgrep -f "llama-server")`
 
-### Error de Memoria al Iniciar llama.cpp
+#### Error de Memoria al Iniciar llama.cpp
 
 Si da error de memoria revisar RAM. Si > 476 MB entonces 
 
@@ -745,29 +276,31 @@ Si da error de memoria revisar RAM. Si > 476 MB entonces
 2) Hay basura
 Se comprueba con: 
 
-  nvidia-smi
+   `nvidia-smi`
 
 Para limpiar restos de la ejecucion anterior ejecutar:
 
-  kill -9 <PID>
+  `kill -9 <PID>`
 
 Si no hubiera procesos visibles probar:
 
-  sudo nvidia-smi --gpu-reset -i 0
+  `sudo nvidia-smi --gpu-reset -i 0`
 
 
-## GIT Steps
+### GIT Steps
 
+```
 git status
 
 git add .
 
-git commit -m "TU MENSAJE"
+git commit -m "[TU MENSAJE]"
 
 git push
+```
 
-## Ejecutar Prorgama
+### Ejecutar Prorgama
 
-### Módulo
+#### Módulo
 
-python -m documenttoolkit.main
+`python -m documenttoolkit.main`
