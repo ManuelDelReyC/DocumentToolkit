@@ -1,8 +1,11 @@
-from .llm_extractor import sugerir_tipo_documento
+from documenttoolkit.scanner import scan_documents
+from documenttoolkit.pdf_reader import extract_text
+from documenttoolkit.ocr_reader import extract_text_ocr
+from pathlib import Path
 import re
 
-def score_tipo_legal(texto):
-    texto_norm = texto.upper()          #Texto normalizado en mayusculas
+def score_tipo(texto):
+    texto_norm = texto.upper()
     # Fragmentos relevantes
     inicio = texto_norm[:3000]
     final = texto_norm[-3000:]    
@@ -167,25 +170,49 @@ def score_tipo_legal(texto):
 
     return None
 
+
 def classify_document(texto):
     texto_norm = texto.upper()
-    tipo_legal = score_tipo_legal(texto)
+    tipo_legal = score_tipo(texto)
 
-    if tipo_legal:                          #Si existe un tipo legal, lo devolvemos
-        return tipo_legal
-    elif texto_norm:
-        if "RECIBO DE PRÉSTAMO" in texto_norm:
-            return "HIPOTECA"
-        elif "EXTRACTO" in texto_norm or "OPERACIONES" in texto_norm:
-            return "EXTRACTO_BANCARIO"
-        elif "BIZUM" in texto_norm or "TRANSFERENCIA" in texto_norm:
-            return "TRANSFERENCIA_BANCARIA"
-        elif "DETALLE DEL MOVIMIENTO" in texto_norm or "LIQUIDACI" in texto_norm or "DOMICILIACI" in texto_norm or "ADEUDO" in texto_norm:
-            return "MOVIMIENTO_BANCARIO"
-
-    # Si no se ha podido clasificar, usamos el LLM para sugerir un tipo
-
-    tipo_llm = sugerir_tipo_documento(texto)
-    if tipo_llm and tipo_llm != "DESCONOCIDO":
-        return tipo_llm
+    if "RECIBO DE PRÉSTAMO" in texto_norm:
+        return "HIPOTECA"
+    elif "EXTRACTO" in texto_norm or "OPERACIONES" in texto_norm:
+        return "EXTRACTO_BANCARIO"
+    elif "BIZUM" in texto_norm or "TRANSFERENCIA" in texto_norm:
+        return "TRANSFERENCIA_BANCARIA"
+    elif "DETALLE DEL MOVIMIENTO" in texto_norm or "LIQUIDACI" in texto_norm or "DOMICILIACI" in texto_norm or "ADEUDO" in texto_norm:
+        return "MOVIMIENTO_BANCARIO"
+    elif tipo_legal:
+        if tipo_legal:
+            return tipo_legal
     return "OTRO"
+
+documentos = scan_documents()
+for documento in documentos:
+    # Convertimos a ruta absoluta para la base de datos
+    ruta_absoluta = str(documento.resolve())
+
+    
+    print("\n==============================")
+    print("Archivo:", documento.name)
+    print("==============================")
+
+    texto = extract_text(documento)
+
+    if texto:
+        print("Texto extraído correctamente.")
+
+    else:
+        print("El documento no contiene texto. Extraccion por OCR.")
+        texto = extract_text_ocr(documento)
+
+    print("Número de caracteres:", len(texto))
+    print(repr(texto[:100]))
+
+    legal_score = score_tipo(texto)
+    print("Clase legal", legal_score)
+    
+    clase = classify_document(texto)
+    print(clase)
+

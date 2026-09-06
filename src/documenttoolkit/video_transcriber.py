@@ -84,7 +84,7 @@ def transcribir_y_guardar(ruta_video: Path, db, transcriber: Optional[VideoTrans
     db.guardar_documento(
         ruta=str(ruta_video.resolve()),
         tipo_entrada="video",
-        tipo_doc=clase,
+        tipo_doc="TRANSCRIPCION_VIDEO",
         texto=texto,
         num_chars=len(texto),
         dominio=datos.get("dominio", "desconocido"),

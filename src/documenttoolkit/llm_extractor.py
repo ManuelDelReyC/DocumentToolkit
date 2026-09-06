@@ -22,7 +22,7 @@ def sugerir_tipo_documento(texto_muestra: str) -> Optional[str]:
         "Eres un clasificador documental. "
         "Dado un fragmento de documento, responde ÚNICAMENTE una de estas etiquetas: "
         "EXTRACTO_BANCARIO, NOMINA, FACTURA, CONTRATO, ESCRITO_JUDICIAL, "
-        "SENTENCIA, DESCONOCIDO. "
+        "SENTENCIA, AUTO, NOTA_SIMPLE, APUD_ACTA, DESCONOCIDO. "
         "Sin explicaciones, solo la etiqueta en mayúsculas."
     )
     muestra = texto_muestra[:2000].replace("\n", " ")
@@ -37,7 +37,7 @@ def sugerir_tipo_documento(texto_muestra: str) -> Optional[str]:
 
     resp = resp.strip().upper()
     validos = {"EXTRACTO_BANCARIO", "NOMINA", "FACTURA", "CONTRATO",
-               "ESCRITO_JUDICIAL", "SENTENCIA", "DESCONOCIDO"}
+               "ESCRITO_JUDICIAL", "SENTENCIA", "AUTO", "NOTA_SIMPLE", "APUD_ACTA", "DESCONOCIDO"}
     for v in validos:
         if v in resp:
             return v
