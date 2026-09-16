@@ -8,29 +8,28 @@ CTX="${2:-6144}"
 # Verifica que el modelo existe
 if [ ! -f "$MODELO" ]; then
     echo "❌ Modelo no encontrado: $MODELO"
-    echo "Uso: ./start_llm_server.sh [ruta_modelo] [capas_gpu] [contexto]"
+    echo "Uso: ./start_llm_server.sh [capas_gpu] [contexto]"
     exit 1
 fi
 
 echo "🚀 Iniciando llama.cpp server..."
-echo "   Modelo: $(basename $MODELO)"
+echo "   Modelo: $(basename "$MODELO")"
 echo "   Capas GPU: $NGL"
 echo "   Contexto: $CTX"
 echo "   URL: http://localhost:8080"
 echo ""
 
-# Lanzamiento con optimizaciones para tu hardware
 ~/Proyectos/llama/src/llama.cpp/build/bin/llama-server \
   -m "$MODELO" \
   --host 127.0.0.1 \
   --port 8080 \
-  -ngl $NGL \
-  -c $CTX \
+  -ngl "$NGL" \
+  -c "$CTX" \
   -t 10 \
   -n 2048 \
   --timeout 300 \
-  --mlock \
-  --metrics \ 
+  --load-mode mlock \
+  --metrics \
   --perf \
   -ctk q8_0 \
   -ctv q8_0
