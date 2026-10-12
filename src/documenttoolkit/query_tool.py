@@ -11,6 +11,15 @@ from .database import DocumentDatabase
 from .config import DB_PATH
 
 
+def _icono_entrada(tipo_entrada: str) -> str:
+    """Devuelve un icono representativo según el tipo de entrada."""
+    return {
+        "pdf": "📄",
+        "video": "🎬",
+        "audio": "🎵",
+    }.get(tipo_entrada, "📁")
+
+
 def mostrar_documento(doc: dict, completo: bool = False):
     """Imprime un documento de forma legible."""
     print(f"\n{'='*60}")
@@ -61,7 +70,7 @@ def listar(db: DocumentDatabase, tipo: str = None, dominio: str = None, limite: 
 
     print(f"\n📚 Total: {len(docs)} documento(s)")
     for doc in docs:
-        icono = "📄" if doc['tipo_entrada'] == 'pdf' else "🎬"
+        icono = _icono_entrada(doc['tipo_entrada'])
         print(f"  {icono} {doc['nombre_archivo']:<40} | {doc['tipo_documento']:<20} | {doc['num_caracteres']:>6} chars")
 
     print(f"\n💡 Usa --ver <ruta> para ver detalle de uno, o --completo con --listar")

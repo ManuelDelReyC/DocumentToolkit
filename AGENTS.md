@@ -14,7 +14,9 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - Modules can be run from any working directory; paths resolve from the repo root via `config.py`.
 - Main pipeline: `python -m documenttoolkit.main`
   - Scans `data/input/*.pdf`, extracts text/OCR, classifies, enriches, persists to `data/output/docs.db`.
-  - Then processes `data/input/videos/*.{mp4,mp3,wav,m4a,avi,mov}` via Whisper.
+  - Then processes `data/input/videos/*.{mp4,avi,mov,mkv}` and `data/input/audios/*.{mp3,wav,m4a,ogg,flac}` via Whisper.
+  - Uses `MediaTranscriber` from `media_transcriber.py`, with Faster-Whisper on CPU and `int8`; the default model is `medium`.
+  - Stores media as `tipo_entrada="video"` or `tipo_entrada="audio"`, using `TRANSCRIPCION_VIDEO` or `TRANSCRIPCION_AUDIO`.
   - Skips files already in the DB unless marked for reprocessing.
 - Optional local LLM enriches classification/extraction; the app degrades gracefully if `localhost:8080` is down.
 
@@ -50,19 +52,22 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - Run: `python -m pytest` from repo root.
 - Current state: `test_llm_client.py` fails because it calls `client.sugerir_tipo_documento()` and `client.extraer_entidades()`, which do not exist on `LLMClient`; those functions live in `documenttoolkit.llm_extractor`.
 - `test_score_classifier.py` and `test_video.py` operate on real files in `data/input/` and can be slow or fail if inputs are missing.
+- `test_audio.py` is the equivalent manual test for `data/input/audios/`; `test_media_transcriber.py` covers extension/type detection without loading Whisper.
 
 ## Dependencies
 
 - `pdf_reader.py` uses `pypdf` for native PDF text extraction.
-- `pyproject.toml` and `requirements.txt` both declare `pypdf`.
+- `pyproject.toml` and `requirements.txt` both declare `pypdf` and `faster-whisper`.
 
 ## Paths
 
 - `config.py` is the single source of truth for project paths.
 - `scanner.py`, `main.py`, `database.py`, and `query_tool.py` all resolve paths from the repo root via `config.py`.
+- `INPUT_AUDIO_DIR` points to `data/input/audios/`; `INPUT_VIDEO_DIR` points to `data/input/videos/`.
 - Modules can be run from any working directory and still locate `data/input/` and `data/output/docs.db` correctly.
 
 ## Unused/placeholder code
 
 - `src/documenttoolkit/ingestors/pdf_ingestor.py` is empty.
-- `video_ingestor.py` exists but the app uses module-level functions, not the ingestors.
+- `video_ingestor.py` is empty; the app uses `media_transcriber.py` (previously `video_transcriber.py`).
+- `video_transcriber.py` is now a compatibility wrapper that re-exports `MediaTranscriber` as `VideoTranscriber`.

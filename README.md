@@ -28,8 +28,13 @@ El proyecto nace como ejercicio práctico para aprender Python, procesamiento de
 
 ### 🎬 Transcripción de audio y video
 - Transcripción local con **Faster-Whisper** (CPU, optimizado `int8`).
-- Soporta: `mp4`, `mp3`, `wav`, `m4a`, `avi`, `mov`, `mkv`, `ogg`.
+- Modelo por defecto: `medium`, configurable al crear `MediaTranscriber`.
+- Soporta video: `mp4`, `avi`, `mov`, `mkv`.
+- Soporta audio: `mp3`, `wav`, `m4a`, `ogg`, `flac`.
+- Los videos se procesan desde `data/input/videos/` y los audios desde `data/input/audios/`.
 - El texto transcrito se procesa con el **mismo pipeline** que los PDFs: clasificación, extracción y guardado en base de datos.
+- La base de datos distingue `tipo_entrada="video"` y `tipo_entrada="audio"`, con tipos `TRANSCRIPCION_VIDEO` y `TRANSCRIPCION_AUDIO`.
+- La diarización de hablantes está pendiente; actualmente se conservan los timestamps de Whisper, pero no la identidad de cada interlocutor.
 
 ### 🗄️ Persistencia y consultas
 - **SQLite local** (`data/output/docs.db`) para evitar reprocesar archivos.
@@ -48,11 +53,13 @@ El proyecto nace como ejercicio práctico para aprender Python, procesamiento de
 ## 🏗️ Arquitectura
 ```
 data/input/
-├── pdf/              → PDFs e imágenes
-└── videos/           → Audio y video
+├── *.pdf             → PDFs e imágenes
+├── videos/           → Archivos de video
+└── audios/           → Archivos de audio
                ↓
 ┌──────────────────────────────────────────────┐
-│  Ingestores (pdf_reader / video_transcriber) │
+│  Lectura y transcripción                     │
+│  (pdf_reader / ocr_reader / media_transcriber)│
 └──────────────────────────────────────────────┘
                ↓
           Texto plano
@@ -89,7 +96,7 @@ data/input/
 | Lenguaje | Python 3.12+ | |
 | Extracción PDF | `pypdf` | Texto nativo |
 | OCR | `pytesseract` + `pdf2image` | Imágenes y PDFs escaneados |
-| Transcripción | `faster-whisper` | CPU, modelos `small`/`base` |
+| Transcripción | `faster-whisper` | CPU, `int8`, modelo `medium` por defecto |
 | IA Local | `llama.cpp` (servidor) | Via API OpenAI-compatible |
 | Cliente LLM | `urllib` nativo | Sin dependencias pesadas |
 | Base de datos | `sqlite3` (stdlib) | Sin instalación adicional |
@@ -104,14 +111,15 @@ DocumentToolkit/
 ```
 ├── data/
 │   ├── input/
-│   │   ├── pdf/
-│   │   └── videos/
+│   │   ├── *.pdf
+│   │   ├── videos/
+│   │   └── audios/
 │   └── output/
 │       └── docs.db
 ├── scripts/
 │   └── start_llm_server.sh
 ├── src/documenttoolkit/
-│   ├── init.py
+│   ├── __init__.py
 │   ├── main.py
 │   ├── config.py
 │   ├── database.py
@@ -124,12 +132,15 @@ DocumentToolkit/
 │   ├── enriched_extractor.py
 │   ├── llm_client.py
 │   ├── llm_extractor.py
-│   ├── video_transcriber.py
+│   ├── media_transcriber.py
+│   ├── video_transcriber.py      (compatibilidad)
 │   └── query_tool.py
 ├── tests/
 │   ├── test_ocr_data.py
 │   ├── test_llm_integration.py
-│   └── test_video.py
+│   ├── test_video.py
+│   ├── test_audio.py
+│   └── test_media_transcriber.py
 ├── pyproject.toml
 ├── README.md
 └── .gitignore
@@ -167,7 +178,7 @@ pip install -e .
 
 ## ▶️ Uso
 
-1. Procesar documentos (PDFs + Videos)
+1. Procesar documentos (PDFs + audio/video)
 
    Opcional: arrancar el servidor LLM para enriquecimiento:
    `./scripts/start_llm_server.sh`
@@ -177,6 +188,8 @@ pip install -e .
    `python -m documenttoolkit.main`
 
    La primera vez procesa todo. Las siguientes, salta archivos ya indexados en la base de datos.
+   Los PDFs se leen desde `data/input/`, los videos desde `data/input/videos/`
+   y los audios desde `data/input/audios/`.
 
 2. Consultar la base de datos
 ```
@@ -195,10 +208,11 @@ pip install -e .
    # Exportar a JSON
    python -m documenttoolkit.query_tool exportar data/output/resumen.json
 
-   3. Transcribir un video de forma aislada
+3. Transcribir un video o audio de forma aislada
 
-   python tests/test_video.py
-   (Ajusta la ruta del video en el script antes de ejecutar.)
+   `python tests/test_video.py`
+   `python tests/test_audio.py`
+   (Ajusta la ruta del fichero en el script antes de ejecutar.)
 
 
 🧠 Filosofía de desarrollo
@@ -208,7 +222,7 @@ El proyecto se construye de forma incremental y deliberada:
     Determinista antes que mágico: las extracciones de IBAN, CCC y clasificación por reglas son rápidas, testeables y gratuitas. El LLM actúa como segunda opinión, nunca como reemplazo.
     Local antes que en la nube: todo el procesamiento (OCR, transcripción, inferencia) ocurre en la máquina local. Sin cuotas, sin latencia de red, sin enviar documentos judiciales o bancarios a terceros.
     Testeable desde el primer día: cada función nueva va acompañada de tests. Si el LLM no responde, el sistema sigue funcionando.
-    Un solo pipeline para todas las fuentes: PDFs, imágenes escaneadas y videos de juicios convergen en el mismo flujo de texto → clasificación → extracción → base de datos.
+    Un solo pipeline para todas las fuentes: PDFs, imágenes escaneadas, audios y videos convergen en el mismo flujo de texto → clasificación → extracción → base de datos.
 
 
 📌 Roadmap
@@ -219,6 +233,7 @@ El proyecto se construye de forma incremental y deliberada:
     [x] Persistencia SQLite con evitación de reprocesado
     [x] Transcripción de audio/video con Whisper
     [x] Herramienta de consulta por terminal
+     [ ] Diarización de hablantes en conversaciones
     [ ] Extractores especializados por dominio (bancario vs. judicial)
     [ ] Prompts específicos para documentos judiciales (partes, objeto, pretensiones)
     [ ] Búsqueda semántica con embeddings (ChromaDB/FAISS)

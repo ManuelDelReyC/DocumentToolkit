@@ -6,8 +6,24 @@ from .enriched_extractor import extract_data_enriched
 from .ocr_reader import extract_text_ocr
 from pathlib import Path
 from .database import DocumentDatabase
-from documenttoolkit.video_transcriber import VideoTranscriber, transcribir_y_guardar
-from documenttoolkit.config import DB_PATH, INPUT_VIDEO_DIR
+from documenttoolkit.media_transcriber import (
+    MediaTranscriber,
+    transcribir_y_guardar,
+    MEDIA_EXTENSIONS,
+)
+from documenttoolkit.config import DB_PATH, INPUT_VIDEO_DIR, INPUT_AUDIO_DIR
+
+
+def scan_media_files():
+    """Busca ficheros de audio y video en las carpetas dedicadas."""
+    archivos = []
+    for carpeta in (INPUT_VIDEO_DIR, INPUT_AUDIO_DIR):
+        if not carpeta.exists():
+            continue
+        for elemento in carpeta.iterdir():
+            if elemento.is_file() and elemento.suffix.lower() in MEDIA_EXTENSIONS:
+                archivos.append(elemento)
+    return archivos
 
 
 if __name__ == "__main__":
@@ -68,21 +84,16 @@ for documento in documentos:
     )
     print("💾 Guardado en base de datos.")
 
-# ========== BUCLE DE VIDEOS (nuevo, al final) ==========
-videos = list(INPUT_VIDEO_DIR.glob("*.mp4")) + \
-         list(INPUT_VIDEO_DIR.glob("*.mp3")) + \
-         list(INPUT_VIDEO_DIR.glob("*.wav")) + \
-         list(INPUT_VIDEO_DIR.glob("*.m4a")) + \
-         list(INPUT_VIDEO_DIR.glob("*.avi")) + \
-         list(INPUT_VIDEO_DIR.glob("*.mov"))
+# ========== BUCLE DE AUDIO/VIDEO (al final) ==========
+media = scan_media_files()
 
-if videos:
-    print(f"\n🎬 {len(videos)} video(s)/audio(s) encontrado(s).")
-    transcriber = VideoTranscriber()
-    for video in videos:
-        if db.documento_existe(str(video.resolve())):
-            print(f"⏩ Ya procesado: {video.name}")
+if media:
+    print(f"\n🎬 {len(media)} fichero(s) de audio/video encontrado(s).")
+    transcriber = MediaTranscriber()
+    for fichero in media:
+        if db.documento_existe(str(fichero.resolve())):
+            print(f"⏩ Ya procesado: {fichero.name}")
             continue
-        transcribir_y_guardar(video, db, transcriber)
+        transcribir_y_guardar(fichero, db, transcriber)
 else:
-    print("\n🎬 No hay videos/audios en data/input/videos/")
+    print("\n🎬 No hay videos en data/input/videos/ ni audios en data/input/audios/")
