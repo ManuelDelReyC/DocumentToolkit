@@ -10,13 +10,15 @@ import os
 from datetime import datetime
 from typing import Optional, List, Dict
 
+from .config import DB_PATH
+
 
 class DocumentDatabase:
     """
     Gestiona la base de datos SQLite de documentos procesados.
     """
 
-    def __init__(self, db_path: str = "data/output/docs.db"):
+    def __init__(self, db_path: str = DB_PATH):
         """
         :param db_path: Ruta al archivo .db. Por defecto en carpeta 'data/' del proyecto.
         """

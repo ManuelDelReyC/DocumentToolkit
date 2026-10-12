@@ -87,7 +87,7 @@ data/input/
 | Componente | Tecnología | Notas |
 |------------|-----------|-------|
 | Lenguaje | Python 3.12+ | |
-| Extracción PDF | `pdfplumber` | Texto nativo |
+| Extracción PDF | `pypdf` | Texto nativo |
 | OCR | `pytesseract` + `pdf2image` | Imágenes y PDFs escaneados |
 | Transcripción | `faster-whisper` | CPU, modelos `small`/`base` |
 | IA Local | `llama.cpp` (servidor) | Via API OpenAI-compatible |
@@ -248,9 +248,13 @@ Proyecto personal de aprendizaje. Uso libre para fines educativos y profesionale
 
 `cd ~/Proyectos/DocumentToolkit`    o donde tengas la carpeta
 
-`chmod +x start_llm_server.sh`      ← CORRECCIÓN: +x, no -x
+`chmod +x scripts/start_llm_server.sh`
 
-`./start_llm_server.sh`             ← Ejecutar con ./
+`./scripts/start_llm_server.sh`     ← Ejecutar con ./
+
+También puedes indicar modelo, capas GPU y contexto:
+
+`./scripts/start_llm_server.sh "$HOME/Proyectos/llama/models/Qwen3-8B-Q4_K_M.gguf" 99 8192`
 
 
 #### Sin Script

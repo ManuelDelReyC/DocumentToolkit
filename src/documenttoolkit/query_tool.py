@@ -8,6 +8,7 @@ import json
 import argparse
 from pathlib import Path
 from .database import DocumentDatabase
+from .config import DB_PATH
 
 
 def mostrar_documento(doc: dict, completo: bool = False):
@@ -161,7 +162,7 @@ def main():
         description="Consulta la base de datos de DocumentToolkit"
     )
     parser.add_argument(
-        "--db", default="data/output/docs.db",
+        "--db", default=DB_PATH,
         help="Ruta a la base de datos SQLite (default: data/output/docs.db)"
     )
     

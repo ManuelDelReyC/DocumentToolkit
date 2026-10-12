@@ -21,7 +21,7 @@ if __name__ == "__main__":
         print("✅ LLM local conectado (localhost:8080)\n")
 
 # Inicializa la base de datos (se crea automáticamente si no existe)
-db = DocumentDatabase(db_path="data/output/docs.db")
+db = DocumentDatabase(db_path=DB_PATH)
 
 documentos = scan_documents()
 for documento in documentos:

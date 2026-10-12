@@ -4,8 +4,8 @@ from documenttoolkit.ocr_reader import extract_text_ocr
 from pathlib import Path
 import re
 
-def score_tipo(texto):
-    texto_norm = texto.upper()
+def score_tipo_legal(texto):
+    texto_norm = texto.upper()          #Texto normalizado en mayusculas
     # Fragmentos relevantes
     inicio = texto_norm[:3000]
     final = texto_norm[-3000:]    
@@ -173,7 +173,7 @@ def score_tipo(texto):
 
 def classify_document(texto):
     texto_norm = texto.upper()
-    tipo_legal = score_tipo(texto)
+    tipo_legal = score_tipo_legal(texto)
 
     if "RECIBO DE PRÉSTAMO" in texto_norm:
         return "HIPOTECA"
@@ -210,7 +210,7 @@ for documento in documentos:
     print("Número de caracteres:", len(texto))
     print(repr(texto[:100]))
 
-    legal_score = score_tipo(texto)
+    legal_score = score_tipo_legal(texto)
     print("Clase legal", legal_score)
     
     clase = classify_document(texto)

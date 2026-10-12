@@ -1,0 +1,68 @@
+# AGENTS.md — DocumentToolkit
+
+Compact guidance for OpenCode sessions working on DocumentToolkit.
+
+## Project basics
+
+- Python 3.12+, `src/` layout, package name `documenttoolkit`.
+- Install editable: `pip install -e .` from repo root.
+- Dev/test extras: `pip install -e ".[dev]"` (only adds `pytest`).
+- A `.venv/` already exists; activate with `source .venv/bin/activate`.
+
+## Running the app
+
+- Modules can be run from any working directory; paths resolve from the repo root via `config.py`.
+- Main pipeline: `python -m documenttoolkit.main`
+  - Scans `data/input/*.pdf`, extracts text/OCR, classifies, enriches, persists to `data/output/docs.db`.
+  - Then processes `data/input/videos/*.{mp4,mp3,wav,m4a,avi,mov}` via Whisper.
+  - Skips files already in the DB unless marked for reprocessing.
+- Optional local LLM enriches classification/extraction; the app degrades gracefully if `localhost:8080` is down.
+
+## Query tool
+
+- `python -m documenttoolkit.query_tool stats`
+- `python -m documenttoolkit.query_tool listar [--tipo T] [--dominio D] [--limite N]`
+- `python -m documenttoolkit.query_tool buscar "palabra"`
+- `python -m documenttoolkit.query_tool ver <nombre_archivo>`
+- `python -m documenttoolkit.query_tool exportar data/output/resumen.json`
+
+## LLM server
+
+- Helper script: `./scripts/start_llm_server.sh [ruta_modelo] [ngl] [ctx]`
+  - Default binary: `$HOME/Proyectos/llama/src/llama.cpp/build/bin/llama-server`
+  - Default model: `$HOME/Proyectos/llama/models/Qwen3-14B-Q5_K_M.gguf`
+  - Listens on `127.0.0.1:8080`.
+- Override defaults via environment variables:
+  - `LLAMA_SERVER` for the binary path.
+  - `LLAMA_MODEL` for the model path.
+  - `LLAMA_NGL`, `LLAMA_CTX` for GPU layers/context.
+  - `LLAMA_EXTRA` for extra llama-server flags.
+- To stop: `kill -15 $(pgrep -f "llama-server")`
+
+## System dependencies
+
+- Tesseract OCR with Spanish: `tesseract-ocr`, `tesseract-ocr-spa`
+- Poppler: `poppler-utils`
+- Whisper may need `ffmpeg` for some video formats.
+
+## Tests
+
+- Run: `python -m pytest` from repo root.
+- Current state: `test_llm_client.py` fails because it calls `client.sugerir_tipo_documento()` and `client.extraer_entidades()`, which do not exist on `LLMClient`; those functions live in `documenttoolkit.llm_extractor`.
+- `test_score_classifier.py` and `test_video.py` operate on real files in `data/input/` and can be slow or fail if inputs are missing.
+
+## Dependencies
+
+- `pdf_reader.py` uses `pypdf` for native PDF text extraction.
+- `pyproject.toml` and `requirements.txt` both declare `pypdf`.
+
+## Paths
+
+- `config.py` is the single source of truth for project paths.
+- `scanner.py`, `main.py`, `database.py`, and `query_tool.py` all resolve paths from the repo root via `config.py`.
+- Modules can be run from any working directory and still locate `data/input/` and `data/output/docs.db` correctly.
+
+## Unused/placeholder code
+
+- `src/documenttoolkit/ingestors/pdf_ingestor.py` is empty.
+- `video_ingestor.py` exists but the app uses module-level functions, not the ingestors.
