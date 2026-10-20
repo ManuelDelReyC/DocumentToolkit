@@ -32,7 +32,9 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 
 - Helper script: `./scripts/start_llm_server.sh [ruta_modelo] [ngl] [ctx]`
   - Default binary: `$HOME/Proyectos/llama/src/llama.cpp/build/bin/llama-server`
-  - Default model: `$HOME/Proyectos/llama/models/Qwen3-14B-Q5_K_M.gguf`
+  - Default model: `$HOME/Proyectos/llama/models/Qwen3-Coder-30B-A3B-Instruct.Q4_K_M.gguf`
+  - Default GPU layers: `auto` (offload all layers that fit in the 16 GB VRAM)
+  - Default context size: `8192`
   - Listens on `127.0.0.1:8080`.
 - Override defaults via environment variables:
   - `LLAMA_SERVER` for the binary path.
