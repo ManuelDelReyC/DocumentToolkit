@@ -65,7 +65,7 @@ echo ""
   -t 10 \
   -n 4096 \
   --timeout 300 \
-  --flash-attn \
+  --flash-attn on \
   --defrag-thold 0.1 \
   --metrics \
   --perf \
