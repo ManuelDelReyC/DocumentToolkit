@@ -1,9 +1,8 @@
 from documenttoolkit.llm_client import LLMClient
 from .scanner import scan_documents
-from .pdf_reader import extract_text
+from .pdf_reader import extract_text_hibrida, nombre_forzar_ocr
 from .classifier import classify_document
 from .enriched_extractor import extract_data_enriched
-from .ocr_reader import extract_text_ocr
 from pathlib import Path
 from .database import DocumentDatabase
 from documenttoolkit.media_transcriber import (
@@ -54,14 +53,28 @@ for documento in documentos:
         print("⏩ Ya procesado y guardado en base de datos. Saltando.")
         continue
 
-    texto = extract_text(documento)
+    forzar_ocr = nombre_forzar_ocr(documento.name)
+    if forzar_ocr:
+        print("🔠 Marcador OCR detectado en el nombre. Se forzará OCR completo.")
 
-    if texto:
-        print("Texto extraído correctamente.")
+    texto, info_extraccion = extract_text_hibrida(
+        documento,
+        forzar_ocr=forzar_ocr,
+    )
 
+    metodo = info_extraccion["metodo_extraccion"]
+    if metodo == "mixto":
+        print(
+            f"Texto híbrido extraído: "
+            f"{len(info_extraccion['paginas_texto'])} página(s) nativas + "
+            f"{len(info_extraccion['paginas_ocr'])} página(s) por OCR."
+        )
+    elif metodo == "ocr_forzado":
+        print("Texto extraído por OCR forzado.")
+    elif metodo == "ocr":
+        print("Texto extraído por OCR (sin capa de texto nativo).")
     else:
-        print("El documento no contiene texto. Extraccion por OCR.")
-        texto = extract_text_ocr(documento)
+        print("Texto extraído correctamente desde la capa nativa.")
 
     print("Número de caracteres:", len(texto))
     print(repr(texto[:100]))
@@ -71,6 +84,13 @@ for documento in documentos:
 
     datos = extract_data_enriched(texto, clase)
     print(datos)
+
+    # Guardamos metadatos de la extracción junto al resto de datos extraídos
+    datos["metodo_extraccion"] = info_extraccion["metodo_extraccion"]
+    datos["paginas_ocr"] = info_extraccion["paginas_ocr"]
+    datos["paginas_texto"] = info_extraccion["paginas_texto"]
+    datos["chars_nativo"] = info_extraccion["chars_nativo"]
+    datos["chars_ocr"] = info_extraccion["chars_ocr"]
 
     # GUARDAR EN BASE DE DATOS (nuevo bloque, al final del bucle)
     db.guardar_documento(

@@ -29,6 +29,11 @@ def mostrar_documento(doc: dict, completo: bool = False):
     print(f"   Dominio:     {doc.get('dominio', 'N/A')}")
     print(f"   Entrada:     {doc['tipo_entrada']}")
     print(f"   Caracteres:  {doc['num_caracteres']}")
+    metodo = doc.get('datos', {}).get('metodo_extraccion')
+    if metodo:
+        print(f"   Extracción:  {metodo}")
+        if doc['datos'].get('paginas_ocr'):
+            print(f"   Págs. OCR:   {doc['datos']['paginas_ocr']}")
     print(f"   Procesado:   {doc['fecha_procesamiento']}")
 
     datos = doc.get("datos", {})
@@ -145,6 +150,17 @@ def estadisticas(db: DocumentDatabase):
         print(f"      {count:>3} × {dom}")
 
 
+def marcar_reprocesar(db: DocumentDatabase, nombre: str):
+    """Busca un documento por nombre y lo marca para reprocesar."""
+    docs = db.listar_documentos(limite=9999)
+    for d in docs:
+        if d['nombre_archivo'] == nombre or d['nombre_archivo'].startswith(nombre):
+            db.marcar_para_reprocesar(d['ruta_original'])
+            print(f"✅ Marcado para reprocesar: {d['nombre_archivo']}")
+            return
+    print(f"❌ Documento no encontrado: {nombre}")
+
+
 def exportar(db: DocumentDatabase, ruta_salida: str):
     """Exporta todos los documentos a un JSON."""
     docs = db.listar_documentos(limite=9999)
@@ -201,6 +217,13 @@ def main():
     cmd_export = subparsers.add_parser("exportar", help="Exportar a JSON")
     cmd_export.add_argument("salida", help="Ruta del archivo JSON de salida")
 
+    # reprocesar
+    cmd_reprocesar = subparsers.add_parser(
+        "reprocesar",
+        help="Marcar un documento para que se vuelva a procesar",
+    )
+    cmd_reprocesar.add_argument("nombre", help="Nombre del archivo")
+
     args = parser.parse_args()
 
     if not args.comando:
@@ -228,6 +251,9 @@ def main():
 
     elif args.comando == "exportar":
         exportar(db, args.salida)
+
+    elif args.comando == "reprocesar":
+        marcar_reprocesar(db, args.nombre)
 
 
 if __name__ == "__main__":

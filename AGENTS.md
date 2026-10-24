@@ -13,7 +13,9 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 
 - Modules can be run from any working directory; paths resolve from the repo root via `config.py`.
 - Main pipeline: `python -m documenttoolkit.main`
-  - Scans `data/input/*.pdf`, extracts text/OCR, classifies, enriches, persists to `data/output/docs.db`.
+  - Scans `data/input/*.pdf`, extracts text with `pdf_reader.extract_text_hibrida`, classifies, enriches, persists to `data/output/docs.db`.
+  - PDF extraction is hybrid (page-level): uses the native text layer when it is substantial; otherwise OCRs the page. This fixes mixed PDFs with a digital cover page plus scanned image pages.
+  - To force full-document OCR, rename the file so its stem ends in `OCR`, e.g. `documento OCR.pdf`, `doc_ocr.pdf`, `doc-ocr.PDF`.
   - Then processes `data/input/videos/*.{mp4,avi,mov,mkv}` and `data/input/audios/*.{mp3,wav,m4a,ogg,flac}` via Whisper.
   - Uses `MediaTranscriber` from `media_transcriber.py`, with Faster-Whisper on CPU and `int8`; the default model is `medium`.
   - Stores media as `tipo_entrada="video"` or `tipo_entrada="audio"`, using `TRANSCRIPCION_VIDEO` or `TRANSCRIPCION_AUDIO`.
@@ -27,6 +29,7 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - `python -m documenttoolkit.query_tool buscar "palabra"`
 - `python -m documenttoolkit.query_tool ver <nombre_archivo>`
 - `python -m documenttoolkit.query_tool exportar data/output/resumen.json`
+- `python -m documenttoolkit.query_tool reprocesar <nombre_archivo>`
 
 ## LLM server
 
