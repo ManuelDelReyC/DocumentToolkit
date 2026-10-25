@@ -8,7 +8,7 @@ Soporta audio: mp3, wav, m4a, ogg, flac.
 """
 
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, List, Dict, Any
 from faster_whisper import WhisperModel
 
 
@@ -78,6 +78,50 @@ class MediaTranscriber:
             print(f"❌ Error: {e}")
             return None
 
+    def transcribir_detallado(self, ruta_media: Path) -> Optional[List[Dict[str, Any]]]:
+        """
+        Transcribe devolviendo segmentos con las palabras y sus tiempos.
+        No modifica el texto reconocido; es la base para la guionización.
+        """
+        ruta = Path(ruta_media)
+        if not ruta.exists():
+            print(f"❌ No encontrado: {ruta}")
+            return None
+
+        print(f"🎙️  Transcribiendo con tiempos por palabra: {ruta.name}")
+        try:
+            segments, info = self.model.transcribe(
+                str(ruta),
+                language="es",
+                beam_size=5,
+                condition_on_previous_text=True,
+                word_timestamps=True,
+            )
+            print(f"   Idioma detectado: {info.language} (confianza: {info.language_probability:.2f})")
+
+            resultado = []
+            for seg in segments:
+                palabras = []
+                for w in getattr(seg, "words", []):
+                    palabras.append({
+                        "inicio": w.start,
+                        "fin": w.end,
+                        "texto": w.word.strip(),
+                    })
+                resultado.append({
+                    "inicio": seg.start,
+                    "fin": seg.end,
+                    "texto": seg.text.strip(),
+                    "palabras": palabras,
+                })
+
+            print(f"   Segmentos: {len(resultado)} | Duración: {self._fmt(info.duration)}")
+            return resultado
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return None
+
     @staticmethod
     def _fmt(segundos: float) -> str:
         h = int(segundos // 3600)
@@ -101,15 +145,20 @@ def transcribir_y_guardar(ruta_media: Path, db, transcriber: Optional[MediaTrans
     if transcriber is None:
         transcriber = MediaTranscriber()
 
-    texto = transcriber.transcribir(ruta)
-    if not texto:
+    detalle = transcriber.transcribir_detallado(ruta)
+    if not detalle:
         return None
+
+    texto = "\n".join(
+        f"[{transcriber._fmt(seg['inicio'])} --> {transcriber._fmt(seg['fin'])}]  {seg['texto']}"
+        for seg in detalle
+    )
 
     # Mismo pipeline exacto que un PDF
     clase = classify_document(texto)
     datos = extract_data_enriched(texto, clase)
 
-    db.guardar_documento(
+    documento_id = db.guardar_documento(
         ruta=str(ruta.resolve()),
         tipo_entrada=tipo_entrada,
         tipo_doc=tipo_doc,
@@ -118,5 +167,6 @@ def transcribir_y_guardar(ruta_media: Path, db, transcriber: Optional[MediaTrans
         dominio=datos.get("dominio", "desconocido"),
         datos_dict=datos
     )
+    db.guardar_segmentos_asr(documento_id, detalle)
     print(f"💾 Guardado en BD: {ruta.name} → {clase}")
     return datos

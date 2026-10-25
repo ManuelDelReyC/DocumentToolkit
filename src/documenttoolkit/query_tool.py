@@ -7,8 +7,11 @@ Ejecutable como script o importable como módulo.
 import json
 import argparse
 from pathlib import Path
+from typing import Optional, List
 from .database import DocumentDatabase
 from .config import DB_PATH
+from . import guion as guion_mod
+from .guion import TurnoGuion
 
 
 def _icono_entrada(tipo_entrada: str) -> str:
@@ -175,11 +178,176 @@ def exportar(db: DocumentDatabase, ruta_salida: str):
             "fecha": d['fecha_procesamiento'],
             "datos": d.get('datos', {})
         })
-    
+
     with open(ruta_salida, 'w', encoding='utf-8') as f:
         json.dump(exportable, f, ensure_ascii=False, indent=2)
-    
+
     print(f"✅ Exportados {len(docs)} documentos a: {ruta_salida}")
+
+
+# ============ GUION / DIARIZACIÓN ============
+
+def _buscar_documento(db: DocumentDatabase, ruta_o_nombre: str) -> Optional[Dict]:
+    """Busca un documento por ruta exacta o por prefijo de nombre."""
+    doc = db.obtener_por_ruta(ruta_o_nombre)
+    if doc:
+        return doc
+    docs = db.listar_documentos(limite=9999)
+    for d in docs:
+        if d['nombre_archivo'] == ruta_o_nombre or d['nombre_archivo'].startswith(ruta_o_nombre):
+            return d
+    return None
+
+
+def _metadatos_guion(doc: Dict) -> Dict[str, str]:
+    """Metadatos que aparecerán en la cabecera del guion."""
+    return {
+        "Archivo": doc['nombre_archivo'],
+        "Ruta": doc['ruta_original'],
+        "Tipo": doc.get('tipo_documento') or "desconocido",
+        "Procesado": doc.get('fecha_procesamiento') or "desconocido",
+    }
+
+
+def _regenerar_guion(db: DocumentDatabase, doc_id: int) -> Optional[List[TurnoGuion]]:
+    """Reconstruye y guarda los turnos del guion a partir de los datos almacenados."""
+    segmentos = db.obtener_segmentos_asr(doc_id)
+    turnos_db = db.obtener_turnos_diarizacion(doc_id)
+
+    if not segmentos:
+        return None
+
+    turnos_guion = guion_mod.construir_guion(segmentos, turnos_db)
+    db.guardar_turnos_guion(doc_id, guion_mod.turnos_guion_a_db(turnos_guion))
+    return turnos_guion
+
+
+def mostrar_guion(db: DocumentDatabase, ruta_o_nombre: str, sin_cabecera: bool = False):
+    """Muestra el guion teatral de un archivo de audio/video."""
+    doc = _buscar_documento(db, ruta_o_nombre)
+    if not doc:
+        print(f"❌ Documento no encontrado: {ruta_o_nombre}")
+        return
+
+    turnos_guion = _regenerar_guion(db, doc['id'])
+    if turnos_guion is None:
+        print(f"⚠️  {doc['nombre_archivo']} no tiene segmentos ASR. "
+              "Transcríbelo primero con python -m documenttoolkit.main")
+        return
+
+    mapa_etiquetas = db.obtener_hablantes(doc['id'])
+    metadatos = None if sin_cabecera else _metadatos_guion(doc)
+    texto = guion_mod.renderizar_guion(
+        turnos_guion,
+        mapa_etiquetas=mapa_etiquetas,
+        metadatos=metadatos,
+        incluir_cabecera=not sin_cabecera,
+    )
+    print(texto)
+
+
+def etiquetar_hablante(db: DocumentDatabase, ruta_o_nombre: str,
+                       hablante_id: str, etiqueta: str):
+    """Asigna una etiqueta humana a un identificador de voz."""
+    doc = _buscar_documento(db, ruta_o_nombre)
+    if not doc:
+        print(f"❌ Documento no encontrado: {ruta_o_nombre}")
+        return
+
+    db.guardar_hablante(doc['id'], hablante_id, etiqueta)
+    _regenerar_guion(db, doc['id'])
+    print(f"✅ {hablante_id} → {etiqueta} en {doc['nombre_archivo']}")
+
+
+def fusionar_hablantes(db: DocumentDatabase, ruta_o_nombre: str,
+                       hablante_fuente: str, hablante_destino: str):
+    """
+    Une dos identificadores de voz en uno solo. Todos los turnos de la fuente
+    pasan al destino y la etiqueta de la fuente se elimina.
+    """
+    doc = _buscar_documento(db, ruta_o_nombre)
+    if not doc:
+        print(f"❌ Documento no encontrado: {ruta_o_nombre}")
+        return
+
+    doc_id = doc['id']
+    # Actualizar turnos crudos de diarización
+    turnos = db.obtener_turnos_diarizacion(doc_id)
+    actualizados = []
+    for t in turnos:
+        if t['hablante_id'] == hablante_fuente:
+            t = dict(t)
+            t['hablante_id'] = hablante_destino
+        actualizados.append(t)
+    db.guardar_turnos_diarizacion(doc_id, actualizados)
+
+    # Borrar etiqueta de la fuente, si existía
+    db.guardar_hablante(doc_id, hablante_fuente, None)
+
+    _regenerar_guion(db, doc_id)
+    print(f"✅ Fusionado {hablante_fuente} en {hablante_destino} en {doc['nombre_archivo']}")
+
+
+def exportar_guion(db: DocumentDatabase, ruta_o_nombre: str, ruta_salida: str):
+    """Exporta el guion a un archivo de texto."""
+    doc = _buscar_documento(db, ruta_o_nombre)
+    if not doc:
+        print(f"❌ Documento no encontrado: {ruta_o_nombre}")
+        return
+
+    turnos_guion = _regenerar_guion(db, doc['id'])
+    if turnos_guion is None:
+        print(f"⚠️  {doc['nombre_archivo']} no tiene segmentos ASR.")
+        return
+
+    mapa_etiquetas = db.obtener_hablantes(doc['id'])
+    texto = guion_mod.renderizar_guion(
+        turnos_guion,
+        mapa_etiquetas=mapa_etiquetas,
+        metadatos=_metadatos_guion(doc),
+    )
+
+    with open(ruta_salida, 'w', encoding='utf-8') as f:
+        f.write(texto)
+    print(f"✅ Guion exportado a: {ruta_salida}")
+
+
+def cargar_turnos(db: DocumentDatabase, ruta_o_nombre: str, ruta_json: str):
+    """Carga turnos de diarización desde un JSON y regenera el guion."""
+    doc = _buscar_documento(db, ruta_o_nombre)
+    if not doc:
+        print(f"❌ Documento no encontrado: {ruta_o_nombre}")
+        return
+
+    ruta_json_path = Path(ruta_json)
+    if not ruta_json_path.exists():
+        print(f"❌ No encontrado: {ruta_json}")
+        return
+
+    with open(ruta_json_path, 'r', encoding='utf-8') as f:
+        turnos = json.load(f)
+
+    if not isinstance(turnos, list):
+        print("❌ El JSON debe contener una lista de turnos.")
+        return
+
+    db.guardar_turnos_diarizacion(doc['id'], turnos)
+    _regenerar_guion(db, doc['id'])
+    print(f"✅ Cargados {len(turnos)} turnos en {doc['nombre_archivo']}")
+
+
+def regenerar_guion(db: DocumentDatabase, ruta_o_nombre: str):
+    """Fuerza la regeneración del guion desde segmentos ASR y turnos de voz."""
+    doc = _buscar_documento(db, ruta_o_nombre)
+    if not doc:
+        print(f"❌ Documento no encontrado: {ruta_o_nombre}")
+        return
+
+    turnos_guion = _regenerar_guion(db, doc['id'])
+    if turnos_guion is None:
+        print(f"⚠️  {doc['nombre_archivo']} no tiene segmentos ASR.")
+        return
+    print(f"✅ Guion regenerado: {len(turnos_guion)} turno(s)")
 
 
 def main():
@@ -224,6 +392,56 @@ def main():
     )
     cmd_reprocesar.add_argument("nombre", help="Nombre del archivo")
 
+    # guion
+    cmd_guion = subparsers.add_parser(
+        "guion",
+        help="Mostrar el guion diarizado de un audio/video",
+    )
+    cmd_guion.add_argument("ruta", help="Ruta o nombre del archivo")
+    cmd_guion.add_argument("--sin-cabecera", action="store_true",
+                           help="Omitir la cabecera metodológica")
+
+    # etiquetar
+    cmd_etiquetar = subparsers.add_parser(
+        "etiquetar",
+        help="Asignar una etiqueta a un hablante",
+    )
+    cmd_etiquetar.add_argument("ruta", help="Ruta o nombre del archivo")
+    cmd_etiquetar.add_argument("hablante", help="Identificador de hablante")
+    cmd_etiquetar.add_argument("etiqueta", help="Etiqueta descriptiva")
+
+    # fusionar
+    cmd_fusionar = subparsers.add_parser(
+        "fusionar",
+        help="Fusionar dos identificadores de hablante",
+    )
+    cmd_fusionar.add_argument("ruta", help="Ruta o nombre del archivo")
+    cmd_fusionar.add_argument("fuente", help="Hablante que desaparece")
+    cmd_fusionar.add_argument("destino", help="Hablante que permanece")
+
+    # exportar-guion
+    cmd_export_guion = subparsers.add_parser(
+        "exportar-guion",
+        help="Exportar el guion a un archivo de texto",
+    )
+    cmd_export_guion.add_argument("ruta", help="Ruta o nombre del archivo")
+    cmd_export_guion.add_argument("salida", help="Ruta del archivo TXT")
+
+    # cargar-turnos
+    cmd_cargar_turnos = subparsers.add_parser(
+        "cargar-turnos",
+        help="Cargar turnos de diarización desde un JSON (pruebas sin pyannote)",
+    )
+    cmd_cargar_turnos.add_argument("ruta", help="Ruta o nombre del archivo")
+    cmd_cargar_turnos.add_argument("json", help="Ruta del JSON con turnos")
+
+    # regenerar-guion
+    cmd_regenerar = subparsers.add_parser(
+        "regenerar-guion",
+        help="Regenerar el guion desde segmentos ASR y turnos",
+    )
+    cmd_regenerar.add_argument("ruta", help="Ruta o nombre del archivo")
+
     args = parser.parse_args()
 
     if not args.comando:
@@ -254,6 +472,24 @@ def main():
 
     elif args.comando == "reprocesar":
         marcar_reprocesar(db, args.nombre)
+
+    elif args.comando == "guion":
+        mostrar_guion(db, args.ruta, sin_cabecera=args.sin_cabecera)
+
+    elif args.comando == "etiquetar":
+        etiquetar_hablante(db, args.ruta, args.hablante, args.etiqueta)
+
+    elif args.comando == "fusionar":
+        fusionar_hablantes(db, args.ruta, args.fuente, args.destino)
+
+    elif args.comando == "exportar-guion":
+        exportar_guion(db, args.ruta, args.salida)
+
+    elif args.comando == "cargar-turnos":
+        cargar_turnos(db, args.ruta, args.json)
+
+    elif args.comando == "regenerar-guion":
+        regenerar_guion(db, args.ruta)
 
 
 if __name__ == "__main__":

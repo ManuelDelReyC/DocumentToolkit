@@ -34,12 +34,15 @@ El proyecto nace como ejercicio práctico para aprender Python, procesamiento de
 - Los videos se procesan desde `data/input/videos/` y los audios desde `data/input/audios/`.
 - El texto transcrito se procesa con el **mismo pipeline** que los PDFs: clasificación, extracción y guardado en base de datos.
 - La base de datos distingue `tipo_entrada="video"` y `tipo_entrada="audio"`, con tipos `TRANSCRIPCION_VIDEO` y `TRANSCRIPCION_AUDIO`.
-- La diarización de hablantes está pendiente; actualmente se conservan los timestamps de Whisper, pero no la identidad de cada interlocutor.
+- Fase 1 de guionización implementada: alineación de palabras de Whisper con turnos de voz y renderizado de un guion teatral con tiempos, pausas, solapamientos y marcas de revisión.
+- Los identificadores de hablante son anónimos (`HABLANTE_1`, `HABLANTE_2`…) hasta que un usuario los etiqueta manualmente con un rol procesal.
+- El texto del guion no se reescribe: es el mismo reconocido por Whisper, agrupado por intervenciones.
 
 ### 🗄️ Persistencia y consultas
 - **SQLite local** (`data/output/docs.db`) para evitar reprocesar archivos.
 - **Herramienta de consulta** (`query_tool.py`) desde terminal:
   - `listar`, `buscar`, `ver`, `stats`, `exportar`.
+  - Para guiones: `guion`, `etiquetar`, `fusionar`, `exportar-guion`, `cargar-turnos`, `regenerar-guion`.
 - Visualización directa con cualquier cliente SQL (HeidiSQL, DBeaver, sqlite3 CLI).
 
 ### 🧪 Calidad de código

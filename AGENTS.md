@@ -31,6 +31,17 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - `python -m documenttoolkit.query_tool exportar data/output/resumen.json`
 - `python -m documenttoolkit.query_tool reprocesar <nombre_archivo>`
 
+### Guionización (fase 1: alineación y formato)
+
+- `python -m documenttoolkit.query_tool guion <nombre_archivo>` muestra el guion diarizado.
+- `python -m documenttoolkit.query_tool etiquetar <nombre> HABLANTE_1 "LETRADO DE LA PARTE ACTORA"`
+- `python -m documenttoolkit.query_tool fusionar <nombre> HABLANTE_2 HABLANTE_1`
+- `python -m documenttoolkit.query_tool exportar-guion <nombre> data/output/guion.txt`
+- `python -m documenttoolkit.query_tool cargar-turnos <nombre> turnos.json` carga turnos sintéticos para probar sin pyannote.
+- `python -m documenttoolkit.query_tool regenerar-guion <nombre>` regenera el guion desde `segmentos_asr` + `turnos_diarizacion`.
+
+La transcripción cruda de Whisper se conserva en `documentos.texto_extraido`. Los segmentos con palabras, turnos de voz, mapa de etiquetas y turnos del guion se guardan en tablas hijas (`segmentos_asr`, `turnos_diarizacion`, `hablantes`, `turnos_guion`).
+
 ## LLM server
 
 - Helper script: `./scripts/start_llm_server.sh [ruta_modelo] [ngl] [ctx]`
@@ -58,6 +69,8 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - Current state: `test_llm_client.py` fails because it calls `client.sugerir_tipo_documento()` and `client.extraer_entidades()`, which do not exist on `LLMClient`; those functions live in `documenttoolkit.llm_extractor`.
 - `test_score_classifier.py` and `test_video.py` operate on real files in `data/input/` and can be slow or fail if inputs are missing.
 - `test_audio.py` is the equivalent manual test for `data/input/audios/`; `test_media_transcriber.py` covers extension/type detection without loading Whisper.
+- `test_guion.py` tests the alignment and theatrical-format rendering with synthetic data; no models are loaded.
+- `test_database_diarizacion.py` tests the new child tables used for diarization.
 
 ## Dependencies
 
