@@ -35,8 +35,10 @@ El proyecto nace como ejercicio práctico para aprender Python, procesamiento de
 - El texto transcrito se procesa con el **mismo pipeline** que los PDFs: clasificación, extracción y guardado en base de datos.
 - La base de datos distingue `tipo_entrada="video"` y `tipo_entrada="audio"`, con tipos `TRANSCRIPCION_VIDEO` y `TRANSCRIPCION_AUDIO`.
 - Fase 1 de guionización implementada: alineación de palabras de Whisper con turnos de voz y renderizado de un guion teatral con tiempos, pausas, solapamientos y marcas de revisión.
+- Fase 2 de guionización implementada: diarización automática de hablantes con `pyannote.audio` (comando aparte `python -m documenttoolkit.diarizar`).
 - Los identificadores de hablante son anónimos (`HABLANTE_1`, `HABLANTE_2`…) hasta que un usuario los etiqueta manualmente con un rol procesal.
 - El texto del guion no se reescribe: es el mismo reconocido por Whisper, agrupado por intervenciones.
+- Si el audio tiene varios canales claramente separados, se usa `canal = hablante` sin necesidad de modelo de diarización.
 
 ### 🗄️ Persistencia y consultas
 - **SQLite local** (`data/output/docs.db`) para evitar reprocesar archivos.
@@ -100,6 +102,7 @@ data/input/
 | Extracción PDF | `pypdf` | Texto nativo |
 | OCR | `pytesseract` + `pdf2image` | Imágenes y PDFs escaneados |
 | Transcripción | `faster-whisper` | CPU, `int8`, modelo `medium` por defecto |
+| Diarización | `pyannote-audio` (extra opcional `[diarizacion]`) | Pipeline `speaker-diarization-community-1` por defecto |
 | IA Local | `llama.cpp` (servidor) | Via API OpenAI-compatible |
 | Cliente LLM | `urllib` nativo | Sin dependencias pesadas |
 | Base de datos | `sqlite3` (stdlib) | Sin instalación adicional |
@@ -137,13 +140,15 @@ DocumentToolkit/
 │   ├── llm_extractor.py
 │   ├── media_transcriber.py
 │   ├── video_transcriber.py      (compatibilidad)
-│   └── query_tool.py
+│   ├── query_tool.py
+│   └── diarizar.py
 ├── tests/
 │   ├── test_ocr_data.py
 │   ├── test_llm_integration.py
 │   ├── test_video.py
 │   ├── test_audio.py
-│   └── test_media_transcriber.py
+│   ├── test_media_transcriber.py
+│   └── test_diarizar.py
 ├── pyproject.toml
 ├── README.md
 └── .gitignore
@@ -172,50 +177,123 @@ source .venv/bin/activate
 ```
 pip install -e .
 ```
+
+**Con diarización de hablantes (opcional)**
+```
+pip install -e ".[diarizacion]"
+```
+
 ## Requisitos del sistema
 
     Python 3.12+
     Tesseract OCR (apt install tesseract-ocr tesseract-ocr-spa en Ubuntu)
     llama.cpp compilado con soporte CUDA (si dispones de GPU) o CPU.
     Poppler (apt install poppler-utils) para pdf2image.
+    ffmpeg y ffprobe para extracción de audio y análisis de canales.
+    Token de Hugging Face (`HF_TOKEN`) con acceso aceptado al pipeline de diarización si se usa `pyannote.audio`.
 
 ## ▶️ Uso
 
-1. Procesar documentos (PDFs + audio/video)
+El flujo habitual es: **procesar** → **diarizar** (solo audio/video) → **consultar/editar**.
 
-   Opcional: arrancar el servidor LLM para enriquecimiento:
-   `./scripts/start_llm_server.sh`
+### 1. Procesar documentos (PDFs + audio/video)
 
-   Ejecutar el pipeline:
-
-   `python -m documenttoolkit.main`
-
-   La primera vez procesa todo. Las siguientes, salta archivos ya indexados en la base de datos.
-   Los PDFs se leen desde `data/input/`, los videos desde `data/input/videos/`
-   y los audios desde `data/input/audios/`.
-
-2. Consultar la base de datos
+Opcional: arrancar el servidor LLM para enriquecimiento:
+```bash
+./scripts/start_llm_server.sh
 ```
-   # Estadísticas generales
-   python -m documenttoolkit.query_tool stats
 
-   # Listar últimos documentos
-   python -m documenttoolkit.query_tool listar
+Ejecutar el pipeline principal:
+```bash
+python -m documenttoolkit.main
+```
 
-   # Buscar palabra en todo el texto
-   python -m documenttoolkit.query_tool buscar "pensión"
+La primera vez procesa todo. Las siguientes ejecuciones saltan los archivos ya indexados en `data/output/docs.db`.
+- PDFs: `data/input/`
+- Vídeos: `data/input/videos/`
+- Audios: `data/input/audios/`
 
-   # Ver detalle de un documento
-   python -m documenttoolkit.query_tool ver "nombre_del_archivo.pdf"
+### 2. Reprocesar un archivo ya leído
 
-   # Exportar a JSON
-   python -m documenttoolkit.query_tool exportar data/output/resumen.json
+Si cambias un archivo (por ejemplo, una transcripción corregida) o quieres forzar que `main` lo vuelva a procesar:
 
-3. Transcribir un video o audio de forma aislada
+```bash
+python -m documenttoolkit.query_tool reprocesar "nombre_del_archivo.pdf"
+```
 
-   `python tests/test_video.py`
-   `python tests/test_audio.py`
-   (Ajusta la ruta del fichero en el script antes de ejecutar.)
+La siguiente ejecución de `python -m documenttoolkit.main` reprocesará ese archivo.
+
+### 3. Diarizar un audio o video ya procesado
+
+Este paso es **opcional** y se ejecuta después de `main`. Divide la transcripción en intervenciones de hablante.
+
+Requisitos:
+```bash
+pip install -e ".[diarizacion]"
+export HF_TOKEN="tu_token_de_hugging_face"
+```
+
+Ejemplos:
+```bash
+# Dejar que el modelo estime el número de hablantes
+python -m documenttoolkit.diarizar "nombre_del_archivo.wav"
+
+# Forzar un número concreto de hablantes
+python -m documenttoolkit.diarizar "nombre_del_archivo.wav" --hablantes 2
+
+# Forzar CPU (también se puede usar --device cuda o --device auto)
+python -m documenttoolkit.diarizar "nombre_del_archivo.wav" --device cpu
+```
+
+Durante la ejecución:
+- Extrae un WAV mono 16 kHz como base de tiempos y lo borra al terminar.
+- Calcula el **hash SHA-256** del archivo original y lo guarda en los metadatos de la corrida. Es una huella digital para trazabilidad; **no se pide ni se usa en ejecuciones posteriores**, solo se registra una vez.
+- Si detecta canales de audio claramente separados, asigna cada canal a un hablante sin cargar pyannote.
+- Si no, usa `pyannote.audio` para diarizar.
+
+### 4. Ver y editar el guion diarizado
+
+```bash
+# Mostrar guion por pantalla
+python -m documenttoolkit.query_tool guion "nombre_del_archivo.wav"
+
+# Asignar una etiqueta humana a un hablante
+python -m documenttoolkit.query_tool etiquetar "nombre.wav" HABLANTE_1 "LETRADO DE LA PARTE ACTORA"
+
+# Fusionar dos hablantes detectados en uno solo
+python -m documenttoolkit.query_tool fusionar "nombre.wav" HABLANTE_2 HABLANTE_1
+
+# Exportar guion a un archivo de texto
+python -m documenttoolkit.query_tool exportar-guion "nombre.wav" data/output/guion.txt
+```
+
+### 5. Consultar la base de datos
+
+```bash
+# Estadísticas generales
+python -m documenttoolkit.query_tool stats
+
+# Listar últimos documentos
+python -m documenttoolkit.query_tool listar
+
+# Buscar una palabra en todo el texto
+python -m documenttoolkit.query_tool buscar "pensión"
+
+# Ver detalle de un documento
+python -m documenttoolkit.query_tool ver "nombre_del_archivo.pdf"
+
+# Exportar a JSON
+python -m documenttoolkit.query_tool exportar data/output/resumen.json
+```
+
+### 6. Transcribir un video o audio de forma aislada
+
+Para pruebas sin pasar por `main`:
+```bash
+python tests/test_video.py
+python tests/test_audio.py
+```
+(Ajusta la ruta del fichero en el script antes de ejecutar.)
 
 
 🧠 Filosofía de desarrollo
@@ -236,7 +314,7 @@ El proyecto se construye de forma incremental y deliberada:
     [x] Persistencia SQLite con evitación de reprocesado
     [x] Transcripción de audio/video con Whisper
     [x] Herramienta de consulta por terminal
-     [ ] Diarización de hablantes en conversaciones
+    [x] Diarización de hablantes en conversaciones
     [ ] Extractores especializados por dominio (bancario vs. judicial)
     [ ] Prompts específicos para documentos judiciales (partes, objeto, pretensiones)
     [ ] Búsqueda semántica con embeddings (ChromaDB/FAISS)

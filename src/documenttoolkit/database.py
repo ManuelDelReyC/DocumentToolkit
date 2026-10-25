@@ -113,6 +113,24 @@ class DocumentDatabase:
                 )
             except sqlite3.OperationalError:
                 pass
+
+            # Metadatos de la corrida de diarización (fase 2).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS metadatos_diarizacion (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    documento_id INTEGER NOT NULL UNIQUE,
+                    modelo TEXT,
+                    dispositivo TEXT,
+                    hablantes_solicitados INTEGER,
+                    hablantes_estimados INTEGER,
+                    hash_original TEXT,
+                    duracion REAL,
+                    canales INTEGER,
+                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(documento_id) REFERENCES documentos(id)
+                        ON DELETE CASCADE
+                )
+            """)
             conn.commit()
 
     # ============ OPERACIONES CRUD ============
@@ -387,14 +405,59 @@ class DocumentDatabase:
                 resultado.append(d)
             return resultado
 
+    def guardar_metadatos_diarizacion(self, documento_id: int,
+                                      metadatos: Dict[str, Any]) -> None:
+        """
+        Guarda los metadatos de la corrida de diarización.
+        """
+        with self._connect() as conn:
+            conn.execute("""
+                INSERT INTO metadatos_diarizacion (
+                    documento_id, modelo, dispositivo, hablantes_solicitados,
+                    hablantes_estimados, hash_original, duracion, canales, fecha
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(documento_id) DO UPDATE SET
+                    modelo = excluded.modelo,
+                    dispositivo = excluded.dispositivo,
+                    hablantes_solicitados = excluded.hablantes_solicitados,
+                    hablantes_estimados = excluded.hablantes_estimados,
+                    hash_original = excluded.hash_original,
+                    duracion = excluded.duracion,
+                    canales = excluded.canales,
+                    fecha = excluded.fecha
+            """, (
+                documento_id,
+                metadatos.get("modelo"),
+                metadatos.get("dispositivo"),
+                metadatos.get("hablantes_solicitados"),
+                metadatos.get("hablantes_estimados"),
+                metadatos.get("hash_original"),
+                metadatos.get("duracion"),
+                metadatos.get("canales"),
+                metadatos.get("fecha", datetime.now().isoformat()),
+            ))
+            conn.commit()
+
+    def obtener_metadatos_diarizacion(self, documento_id: int) -> Optional[Dict[str, Any]]:
+        """Devuelve los metadatos de diarización de un documento."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM metadatos_diarizacion WHERE documento_id = ?",
+                (documento_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
     def eliminar_datos_diarizacion(self, documento_id: int) -> None:
-        """Borra segmentos ASR, turnos de diarización, hablantes y guion de un documento."""
+        """Borra segmentos ASR, turnos de diarización, hablantes, guion y metadatos de diarización."""
         with self._connect() as conn:
             for tabla in (
                 "segmentos_asr",
                 "turnos_diarizacion",
                 "hablantes",
                 "turnos_guion",
+                "metadatos_diarizacion",
             ):
                 conn.execute(
                     f"DELETE FROM {tabla} WHERE documento_id = ?",

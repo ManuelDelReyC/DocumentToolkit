@@ -199,14 +199,27 @@ def _buscar_documento(db: DocumentDatabase, ruta_o_nombre: str) -> Optional[Dict
     return None
 
 
-def _metadatos_guion(doc: Dict) -> Dict[str, str]:
+def _metadatos_guion(doc: Dict, db: Optional[DocumentDatabase] = None) -> Dict[str, str]:
     """Metadatos que aparecerán en la cabecera del guion."""
-    return {
+    meta = {
         "Archivo": doc['nombre_archivo'],
         "Ruta": doc['ruta_original'],
         "Tipo": doc.get('tipo_documento') or "desconocido",
         "Procesado": doc.get('fecha_procesamiento') or "desconocido",
     }
+    if db is not None:
+        md = db.obtener_metadatos_diarizacion(doc['id'])
+        if md:
+            meta["Modelo diarizacion"] = md.get('modelo') or "desconocido"
+            meta["Dispositivo"] = md.get('dispositivo') or "desconocido"
+            meta["Hablantes estimados"] = str(md.get('hablantes_estimados') or "desconocido")
+            if md.get('hablantes_solicitados'):
+                meta["Hablantes solicitados"] = str(md['hablantes_solicitados'])
+            meta["Hash SHA-256"] = md.get('hash_original') or "desconocido"
+            meta["Duracion"] = f"{md.get('duracion', 0):.3f} s"
+            meta["Canales"] = str(md.get('canales') or "desconocido")
+            meta["Fecha diarizacion"] = md.get('fecha') or "desconocido"
+    return meta
 
 
 def _regenerar_guion(db: DocumentDatabase, doc_id: int) -> Optional[List[TurnoGuion]]:
@@ -236,7 +249,7 @@ def mostrar_guion(db: DocumentDatabase, ruta_o_nombre: str, sin_cabecera: bool =
         return
 
     mapa_etiquetas = db.obtener_hablantes(doc['id'])
-    metadatos = None if sin_cabecera else _metadatos_guion(doc)
+    metadatos = None if sin_cabecera else _metadatos_guion(doc, db)
     texto = guion_mod.renderizar_guion(
         turnos_guion,
         mapa_etiquetas=mapa_etiquetas,
@@ -304,7 +317,7 @@ def exportar_guion(db: DocumentDatabase, ruta_o_nombre: str, ruta_salida: str):
     texto = guion_mod.renderizar_guion(
         turnos_guion,
         mapa_etiquetas=mapa_etiquetas,
-        metadatos=_metadatos_guion(doc),
+        metadatos=_metadatos_guion(doc, db),
     )
 
     with open(ruta_salida, 'w', encoding='utf-8') as f:

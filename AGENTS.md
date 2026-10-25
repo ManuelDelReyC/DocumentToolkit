@@ -7,6 +7,7 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - Python 3.12+, `src/` layout, package name `documenttoolkit`.
 - Install editable: `pip install -e .` from repo root.
 - Dev/test extras: `pip install -e ".[dev]"` (only adds `pytest`).
+- Diarization extra: `pip install -e ".[diarizacion]"` (añade `pyannote-audio>=4.0` y sus dependencias, incluyendo torch).
 - A `.venv/` already exists; activate with `source .venv/bin/activate`.
 
 ## Running the app
@@ -42,6 +43,28 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 
 La transcripción cruda de Whisper se conserva en `documentos.texto_extraido`. Los segmentos con palabras, turnos de voz, mapa de etiquetas y turnos del guion se guardan en tablas hijas (`segmentos_asr`, `turnos_diarizacion`, `hablantes`, `turnos_guion`).
 
+### Guionización (fase 2: diarización)
+
+- Comando aparte, no forma parte de `main.py`:
+  - `python -m documenttoolkit.diarizar RUTA_O_NOMBRE [--hablantes N] [--device cuda|cpu|auto] [--parar-llm]`
+- Busca el documento ya procesado por `main` (igual que `query_tool`). Si no está en la BD, para y pide ejecutar `main` primero.
+- Si no hay `segmentos_asr`, transcribe con `MediaTranscriber.transcribir_detallado()`, guarda solo segmentos y libera Whisper antes de cargar pyannote.
+- Extrae un WAV mono 16 kHz PCM como base de tiempos y lo borra al terminar. Calcula SHA-256 del archivo original.
+- Si ffprobe detecta varios canales claramente separados, usa `canal = hablante` sin pyannote.
+- Si no, diariza con `pyannote.audio`. Se importa solo dentro de la función de diarización; nunca al importar el paquete.
+- Pipeline por defecto: `pyannote/speaker-diarization-community-1` (API vigente de pyannote.audio 4.x). Se puede cambiar con `PYANNOTE_PIPELINE`.
+- `--hablantes N` se pasa como `num_speakers`. Sin él, el modelo estima el número y el comando avisa de que es estimado.
+- `--device auto` usa CUDA si hay GPU y VRAM libre (≥ 4 GB); si no, CPU con aviso de lentitud. No se cargan Whisper y pyannote a la vez.
+- Convierte la anotación a turnos `{hablante_id, inicio, fin}`, incluidos solapamientos, y los guarda con `guardar_turnos_diarizacion`.
+- Regenera el guion con `construir_guion` y `guardar_turnos_guion`. No inventa texto para solapamientos.
+- Guarda metadatos de la corrida en `metadatos_diarizacion` (modelo, dispositivo, hablantes, hash, duración, canales, fecha) y los muestra en la cabecera del guion, sin tocar `datos_extraidos_json`.
+- Gestión del servidor LLM local:
+  - Si `localhost:8080` está ocupado y hay terminal interactiva, pregunta una vez si pararlo y rearrancarlo al final.
+  - Si el usuario acepta, para con SIGTERM, espera a que el puerto quede libre, diariza y rearranca en `finally`.
+  - Si el usuario rechaza, sigue en CPU sin tocar el servidor.
+  - Sin terminal interactivo no para el LLM salvo que se use `--parar-llm`; el rearranque sigue siendo automático.
+  - Si el servidor ya estaba parado, no lo arranca.
+
 ## LLM server
 
 - Helper script: `./scripts/start_llm_server.sh [ruta_modelo] [ngl] [ctx]`
@@ -62,6 +85,8 @@ La transcripción cruda de Whisper se conserva en `documentos.texto_extraido`. L
 - Tesseract OCR with Spanish: `tesseract-ocr`, `tesseract-ocr-spa`
 - Poppler: `poppler-utils`
 - Whisper may need `ffmpeg` for some video formats.
+- Diarización requiere `ffmpeg` y `ffprobe` (extracción del WAV y análisis de canales).
+- `pyannote.audio` necesita un token de Hugging Face (`HF_TOKEN`) con acceso aceptado al pipeline configurado (por defecto `pyannote/speaker-diarization-community-1`).
 
 ## Tests
 
@@ -71,6 +96,7 @@ La transcripción cruda de Whisper se conserva en `documentos.texto_extraido`. L
 - `test_audio.py` is the equivalent manual test for `data/input/audios/`; `test_media_transcriber.py` covers extension/type detection without loading Whisper.
 - `test_guion.py` tests the alignment and theatrical-format rendering with synthetic data; no models are loaded.
 - `test_database_diarizacion.py` tests the new child tables used for diarization.
+- `test_diarizar.py` tests the phase-2 diarization engine: conversion of pyannote annotations to turnos, channel-separation heuristic, LLM stop/restart logic with mocked processes, and end-to-end channel-based diarization without downloading models. The pyannote integration test is skipped if `pyannote.audio` is not installed or `HF_TOKEN` is missing.
 
 ## Dependencies
 

@@ -20,6 +20,9 @@ dependencies = [
 dev = [
     "pytest",
 ]
+diarizacion = [
+    "pyannote-audio>=4.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
