@@ -12,8 +12,11 @@ El proyecto nace como ejercicio práctico para aprender Python, procesamiento de
 - **Extracción de texto** de PDFs con texto nativo.
 - **OCR automático** para PDFs escaneados e imágenes (Tesseract).
 - **Detección inteligente**: decide automáticamente si un PDF necesita OCR.
-- **Extracción determinista** de datos bancarios: IBAN, CCC, titular.
-- **Validación matemática** de IBAN (módulo 97) y CCC (dígitos de control).
+- **Extracción determinista por dominio**:
+  - Bancario: IBAN(s), CCC, titular(es), fechas documento/operación/valor/desde/hasta.
+  - Judicial: órgano, plaza, NIG, número de resolución, procedimientos, partes, DNI/NIE, juez, fecha del documento.
+  - APUD_ACTA: otorgante, apoderado, vigencia.
+- **Validación matemática** de IBAN (módulo 97), CCC (dígitos de control) y DNI/NIE (letra de control).
 
 ### 🏷️ Clasificación inteligente
 - **Clasificación híbrida**: reglas deterministas rápidas + fallback a **LLM local** (llama.cpp) cuando las reglas no coinciden.
@@ -42,8 +45,10 @@ El proyecto nace como ejercicio práctico para aprender Python, procesamiento de
 
 ### 🗄️ Persistencia y consultas
 - **SQLite local** (`data/output/docs.db`) para evitar reprocesar archivos.
+- **Normalización de personas**: se extraen personas con nombre, DNI/NIE y rol por documento, y se guardan en tablas relacionales (`personas`, `documento_personas`) para consultas cruzadas.
 - **Herramienta de consulta** (`query_tool.py`) desde terminal:
   - `listar`, `buscar`, `ver`, `stats`, `exportar`.
+  - `personas`, `buscar-persona` para listar personas y ver en qué documentos aparecen.
   - Para guiones: `guion`, `etiquetar`, `fusionar`, `exportar-guion`, `cargar-turnos`, `regenerar-guion`.
 - Visualización directa con cualquier cliente SQL (HeidiSQL, DBeaver, sqlite3 CLI).
 
@@ -77,9 +82,11 @@ data/input/
                ↓
 ┌──────────────────────────────────────────────┐
 │  Extracción de datos                         │
-│  ├── Determinista (IBAN, CCC, titular, DNI)  │
+│  ├── Determinista por dominio                │
+│  │   (bancario: IBAN/CCC/titulares/fechas;   │
+│  │    judicial: órgano, partes, DNI, fecha)   │
 │  └── Enriquecida con LLM (entidades,         │
-│      correcciones, metadatos judiciales)     │
+│      correcciones, metadatos adicionales)    │
 └──────────────────────────────────────────────┘
                ↓
 ┌──────────────────────────────────────────────┐
@@ -143,6 +150,8 @@ DocumentToolkit/
 │   ├── query_tool.py
 │   └── diarizar.py
 ├── tests/
+│   ├── test_data_extractor.py
+│   ├── test_database_personas.py
 │   ├── test_ocr_data.py
 │   ├── test_llm_integration.py
 │   ├── test_video.py
@@ -282,6 +291,12 @@ python -m documenttoolkit.query_tool buscar "pensión"
 # Ver detalle de un documento
 python -m documenttoolkit.query_tool ver "nombre_del_archivo.pdf"
 
+# Listar personas normalizadas
+python -m documenttoolkit.query_tool personas
+
+# Buscar una persona por nombre o DNI y ver sus documentos
+python -m documenttoolkit.query_tool buscar-persona "44083275A"
+
 # Exportar a JSON
 python -m documenttoolkit.query_tool exportar data/output/resumen.json
 ```
@@ -315,8 +330,9 @@ El proyecto se construye de forma incremental y deliberada:
     [x] Transcripción de audio/video con Whisper
     [x] Herramienta de consulta por terminal
     [x] Diarización de hablantes en conversaciones
-    [ ] Extractores especializados por dominio (bancario vs. judicial)
-    [ ] Prompts específicos para documentos judiciales (partes, objeto, pretensiones)
+    [x] Extractores especializados por dominio (bancario vs. judicial)
+    [ ] Prompts específicos para documentos judiciales (objeto, pretensiones, hechos probados)
+    [ ] Mejorar clasificación para informes médicos/psicológicos y evitar falsos positivos judiciales
     [ ] Búsqueda semántica con embeddings (ChromaDB/FAISS)
     [ ] Detección de contradicciones entre documentos
     [ ] Generación de resúmenes ejecutivos automáticos

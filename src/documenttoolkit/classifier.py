@@ -167,6 +167,26 @@ def score_tipo_legal(texto):
 
     return None
 
+def _parece_bancario(texto_norm):
+    """Evita que palabras sueltas como 'extractos de las entrevistas' sean bancarias."""
+    if not ("EXTRACTO" in texto_norm or "OPERACIONES" in texto_norm):
+        return False
+    # Señales fuertes: bastan solas
+    senales_fuertes = [
+        "IBAN", "CCC", "SALDO", "TRIODOS", "ING BANK", "CAIXABANK",
+        "SANTANDER", "BBVA", "FECHA VALOR", "PAGO PRESTAMO", "RECIBO DE PRÉSTAMO",
+    ]
+    if any(s in texto_norm for s in senales_fuertes):
+        return True
+    # Señales débiles: hacen falta al menos dos
+    senales_debiles = [
+        "CUENTA", "ENTIDAD", "OFICINA", "MOVIMIENTO", "OPERACIONES",
+        "TARJETA", "DOMICILIACIÓN", "LIQUIDACIÓN",
+    ]
+    coinciden = sum(1 for s in senales_debiles if s in texto_norm)
+    return coinciden >= 2
+
+
 def classify_document(texto):
     texto_norm = texto.upper()
     tipo_legal = score_tipo_legal(texto)
@@ -176,7 +196,7 @@ def classify_document(texto):
     elif texto_norm:
         if "RECIBO DE PRÉSTAMO" in texto_norm:
             return "HIPOTECA"
-        elif "EXTRACTO" in texto_norm or "OPERACIONES" in texto_norm:
+        elif _parece_bancario(texto_norm):
             return "EXTRACTO_BANCARIO"
         elif "BIZUM" in texto_norm or "TRANSFERENCIA" in texto_norm:
             return "TRANSFERENCIA_BANCARIA"

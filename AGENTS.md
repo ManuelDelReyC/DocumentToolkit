@@ -21,6 +21,12 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
   - Uses `MediaTranscriber` from `media_transcriber.py`, with Faster-Whisper on CPU and `int8`; the default model is `medium`.
   - Stores media as `tipo_entrada="video"` or `tipo_entrada="audio"`, using `TRANSCRIPCION_VIDEO` or `TRANSCRIPCION_AUDIO`.
   - Skips files already in the DB unless marked for reprocessing.
+- `data_extractor.py` runs deterministic extraction by domain (`bancario`/`judicial`/`desconocido`):
+  - Bancario: IBAN(s), CCC, titular(es), fechas documento/operación/valor/desde/hasta.
+  - Judicial: órgano, plaza, NIG, número de resolución, procedimientos, partes (demandante/demandado/denunciante/denunciado), DNI/NIE, juez, fecha del documento.
+  - APUD_ACTA: otorgante, apoderado, vigencia, fecha de creación.
+  - The `dominio` field is set from the document type and stored in the DB so `query_tool` can show domain-specific fields.
+  - Normalizes persons into `personas` (name, DNI/NIE, role per document, confidence) for cross-document queries.
 - Optional local LLM enriches classification/extraction; the app degrades gracefully if `localhost:8080` is down.
 
 ## Query tool
@@ -29,6 +35,8 @@ Compact guidance for OpenCode sessions working on DocumentToolkit.
 - `python -m documenttoolkit.query_tool listar [--tipo T] [--dominio D] [--limite N]`
 - `python -m documenttoolkit.query_tool buscar "palabra"`
 - `python -m documenttoolkit.query_tool ver <nombre_archivo>`
+- `python -m documenttoolkit.query_tool personas [--limite N]`
+- `python -m documenttoolkit.query_tool buscar-persona "nombre o DNI"`
 - `python -m documenttoolkit.query_tool exportar data/output/resumen.json`
 - `python -m documenttoolkit.query_tool reprocesar <nombre_archivo>`
 
@@ -91,7 +99,9 @@ La transcripción cruda de Whisper se conserva en `documentos.texto_extraido`. L
 ## Tests
 
 - Run: `python -m pytest` from repo root.
-- Current state: `test_llm_client.py` fails because it calls `client.sugerir_tipo_documento()` and `client.extraer_entidades()`, which do not exist on `LLMClient`; those functions live in `documenttoolkit.llm_extractor`.
+- `test_data_extractor.py` covers domain-specific extraction (IBAN, CCC, titulares, fechas, órgano, partes, DNI) with synthetic fixtures.
+- `test_ocr_data.py` keeps the original IBAN/CCC/titular regression tests.
+- `test_llm_client.py` tests the `LLMClient` class; the business helpers `sugerir_tipo_documento` and `extraer_entidades_llm` live in `documenttoolkit.llm_extractor` and are tested in `test_llm_integration.py`.
 - `test_score_classifier.py` and `test_video.py` operate on real files in `data/input/` and can be slow or fail if inputs are missing.
 - `test_audio.py` is the equivalent manual test for `data/input/audios/`; `test_media_transcriber.py` covers extension/type detection without loading Whisper.
 - `test_guion.py` tests the alignment and theatrical-format rendering with synthetic data; no models are loaded.

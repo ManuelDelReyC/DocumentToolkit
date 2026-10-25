@@ -114,6 +114,29 @@ class DocumentDatabase:
             except sqlite3.OperationalError:
                 pass
 
+            # Tablas de personas normalizadas para consultas cruzadas.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS personas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre_canonico TEXT NOT NULL,
+                    dni TEXT,
+                    creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(nombre_canonico, dni)
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS documento_personas (
+                    documento_id INTEGER NOT NULL,
+                    persona_id INTEGER NOT NULL,
+                    rol TEXT NOT NULL,
+                    confianza TEXT NOT NULL DEFAULT 'media',
+                    PRIMARY KEY (documento_id, persona_id),
+                    FOREIGN KEY (documento_id) REFERENCES documentos(id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (persona_id) REFERENCES personas(id)
+                )
+            """)
+
             # Metadatos de la corrida de diarización (fase 2).
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS metadatos_diarizacion (
@@ -144,6 +167,9 @@ class DocumentDatabase:
         Devuelve el ID del registro.
         """
         nombre = os.path.basename(ruta)
+        personas = datos_dict.get("personas", [])
+
+        # Guardamos primero sin persona_id; lo añadiremos tras sincronizar.
         datos_json = json.dumps(datos_dict, ensure_ascii=False, default=str)
 
         with self._connect() as conn:
@@ -167,7 +193,123 @@ class DocumentDatabase:
                 dominio, datos_json, datetime.now().isoformat()
             ))
             conn.commit()
-            return cursor.lastrowid
+            documento_id = cursor.lastrowid
+
+            # Sincronizamos personas y actualizamos el JSON con persona_id.
+            personas_con_id = self.sincronizar_personas(conn, documento_id, personas)
+            datos_dict["personas"] = personas_con_id
+            datos_json_actualizado = json.dumps(datos_dict, ensure_ascii=False, default=str)
+            conn.execute(
+                "UPDATE documentos SET datos_extraidos_json = ? WHERE id = ?",
+                (datos_json_actualizado, documento_id),
+            )
+            conn.commit()
+            return documento_id
+
+    def sincronizar_personas(self, conn, documento_id: int,
+                             personas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Sincroniza la tabla normalizada de personas para un documento.
+
+        - Borra las relaciones previas del documento.
+        - Inserta o recupera cada persona de la tabla personas por
+          (nombre_canonico, dni).
+        - Inserta la relación documento-persona con el rol único.
+        - Devuelve la lista de personas con el campo persona_id rellenado.
+        """
+        # Limpiar relaciones anteriores
+        conn.execute(
+            "DELETE FROM documento_personas WHERE documento_id = ?",
+            (documento_id,)
+        )
+
+        personas_con_id = []
+        for p in personas:
+            nombre = p.get("nombre", "").strip().upper()
+            dni = p.get("dni", "")
+            if not nombre:
+                continue
+
+            # Normalizamos DNI vacío a None para no colisionar en UNIQUE
+            dni_norm = dni.strip().upper() if dni and dni.strip() else None
+
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO personas (nombre_canonico, dni)
+                VALUES (?, ?)
+                """,
+                (nombre, dni_norm)
+            )
+            row = conn.execute(
+                "SELECT id FROM personas WHERE nombre_canonico = ? AND dni IS ?",
+                (nombre, dni_norm)
+            ).fetchone()
+            if row is None:
+                # Fallback por si SQLite trata IS distinto con NULL
+                row = conn.execute(
+                    "SELECT id FROM personas WHERE nombre_canonico = ? AND dni = ?",
+                    (nombre, dni_norm)
+                ).fetchone()
+            persona_id = row["id"]
+
+            rol = p.get("rol", "desconocido")
+            confianza = p.get("confianza", "media")
+            conn.execute(
+                """
+                INSERT INTO documento_personas (documento_id, persona_id, rol, confianza)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(documento_id, persona_id) DO UPDATE SET
+                    rol = excluded.rol,
+                    confianza = excluded.confianza
+                """,
+                (documento_id, persona_id, rol, confianza)
+            )
+
+            personas_con_id.append({
+                **p,
+                "persona_id": persona_id,
+            })
+
+        conn.commit()
+        return personas_con_id
+
+    def listar_personas(self, limite: int = 100) -> List[Dict[str, Any]]:
+        """Lista las personas normalizadas."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM personas ORDER BY nombre_canonico LIMIT ?",
+                (limite,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def buscar_persona(self, termino: str) -> List[Dict[str, Any]]:
+        """Busca personas por nombre canónico o DNI."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM personas
+                WHERE nombre_canonico LIKE ? OR dni = ?
+                ORDER BY nombre_canonico
+                """,
+                (f"%{termino.upper()}%", termino.upper())
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def documentos_de_persona(self, persona_id: int) -> List[Dict[str, Any]]:
+        """Devuelve los documentos donde aparece una persona, con su rol."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT d.id, d.nombre_archivo, d.tipo_documento, d.dominio,
+                       dp.rol, dp.confianza
+                FROM documentos d
+                JOIN documento_personas dp ON d.id = dp.documento_id
+                WHERE dp.persona_id = ?
+                ORDER BY d.fecha_procesamiento DESC
+                """,
+                (persona_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     def obtener_por_ruta(self, ruta: str) -> Optional[Dict]:
         """Devuelve un documento por su ruta original, o None si no existe."""

@@ -46,12 +46,53 @@ def mostrar_documento(doc: dict, completo: bool = False):
         print(f"   IBAN:        {datos.get('IBAN', 'N/A')}")
         print(f"   IBAN Válido: {datos.get('IBAN_Valido', 'N/A')}")
         print(f"   Titular:     {datos.get('Titular', 'N/A') or 'N/A'}")
+        if datos.get("Titulares") and len(datos["Titulares"]) > 1:
+            print(f"   Titulares:   {', '.join(datos['Titulares'])}")
+        if datos.get("CCC"):
+            print(f"   CCC:         {datos['CCC']} (válido: {datos.get('CCC_Valido', False)})")
+        for k, label in [
+            ("fecha_documento", "Fecha documento"),
+            ("fecha_operacion", "Fecha operación"),
+            ("fecha_valor", "Fecha valor"),
+            ("fecha_desde", "Desde"),
+            ("fecha_hasta", "Hasta"),
+        ]:
+            if datos.get(k):
+                print(f"   {label:<14} {datos[k]}")
         if datos.get("importes"):
             print(f"   Importes:    {datos['importes']}")
     elif doc.get("dominio") == "judicial":
         print(f"   DNIs:        {datos.get('dnis', [])}")
         print(f"   Tribunal:    {datos.get('tribunal', 'N/A') or 'N/A'}")
+        if datos.get("plaza"):
+            print(f"   Plaza:       {datos['plaza']}")
+        if datos.get("numero_organo"):
+            print(f"   Nº órgano:   {datos['numero_organo']}")
+        if datos.get("nig"):
+            print(f"   NIG:         {datos['nig']}")
+        if datos.get("numero_resolucion"):
+            print(f"   Resolución:  {datos['numero_resolucion']}")
         print(f"   Procedimiento: {datos.get('num_procedimiento', [])}")
+        if datos.get("juez"):
+            print(f"   Juez/a:      {datos['juez']}")
+        for rol in ["demandantes", "demandados", "denunciantes", "denunciados"]:
+            if datos.get(rol):
+                print(f"   {rol.capitalize():<12} {', '.join(datos[rol])}")
+        if datos.get("fecha_documento"):
+            print(f"   Fecha doc.:  {datos['fecha_documento']}")
+
+    # Personas normalizadas (con DNI y rol)
+    personas = datos.get("personas")
+    if personas:
+        print(f"   Personas:")
+        for p in personas:
+            dni = f" ({p.get('dni')})" if p.get("dni") else ""
+            rol = p.get("rol", "desconocido")
+            confianza = p.get("confianza", "media")
+            extra = ""
+            if p.get("conflicto_roles"):
+                extra = f" [conflicto: {', '.join(p.get('roles_detectados', []))}]"
+            print(f"      - {p['nombre']}{dni} → {rol} [{confianza}]{extra}")
 
     # Entidades del LLM (si existen)
     entidades = datos.get("_llm_entidades")
@@ -103,6 +144,37 @@ def buscar(db: DocumentDatabase, palabra: str, limite: int = 20):
             fin = min(len(texto), idx + len(palabra) + 60)
             snippet = texto[inicio:fin].replace("\n", " ")
             print(f"      ...{snippet}...")
+
+
+def listar_personas(db: DocumentDatabase, limite: int = 50):
+    """Lista las personas normalizadas de la base de datos."""
+    personas = db.listar_personas(limite=limite)
+    if not personas:
+        print("No se encontraron personas en la base de datos.")
+        return
+    print(f"\n👥 {len(personas)} persona(s):")
+    for p in personas:
+        dni = f" (DNI {p['dni']})" if p.get("dni") else ""
+        print(f"  [{p['id']}] {p['nombre_canonico']}{dni}")
+
+
+def buscar_persona(db: DocumentDatabase, termino: str):
+    """Busca personas por nombre o DNI y muestra los documentos asociados."""
+    personas = db.buscar_persona(termino)
+    if not personas:
+        print(f"No se encontraron personas para '{termino}'.")
+        return
+
+    for p in personas:
+        dni = f" (DNI {p['dni']})" if p.get("dni") else ""
+        print(f"\n👤 {p['nombre_canonico']}{dni} [id={p['id']}]")
+        docs = db.documentos_de_persona(p["id"])
+        if not docs:
+            print("   (sin documentos asociados)")
+            continue
+        print(f"   Documentos asociados ({len(docs)}):")
+        for d in docs:
+            print(f"      📄 {d['nombre_archivo']} | {d['tipo_documento']} | {d['dominio']} → {d['rol']} [{d['confianza']}]")
 
 
 def ver(db: DocumentDatabase, ruta: str, completo: bool = False):
@@ -394,6 +466,17 @@ def main():
     # stats
     subparsers.add_parser("stats", help="Estadísticas generales")
 
+    # personas
+    cmd_personas = subparsers.add_parser("personas", help="Listar personas normalizadas")
+    cmd_personas.add_argument("--limite", type=int, default=50, help="Máximo resultados")
+
+    # buscar-persona
+    cmd_buscar_persona = subparsers.add_parser(
+        "buscar-persona",
+        help="Buscar persona por nombre o DNI y ver sus documentos",
+    )
+    cmd_buscar_persona.add_argument("termino", help="Nombre o DNI de la persona")
+
     # exportar
     cmd_export = subparsers.add_parser("exportar", help="Exportar a JSON")
     cmd_export.add_argument("salida", help="Ruta del archivo JSON de salida")
@@ -479,6 +562,12 @@ def main():
 
     elif args.comando == "stats":
         estadisticas(db)
+
+    elif args.comando == "personas":
+        listar_personas(db, args.limite)
+
+    elif args.comando == "buscar-persona":
+        buscar_persona(db, args.termino)
 
     elif args.comando == "exportar":
         exportar(db, args.salida)

@@ -8,11 +8,10 @@ from documenttoolkit.llm_client import LLMClient
 
 
 def test_client_sin_servidor_devuelve_none():
-    """Si no hay servidor, los métodos deben devolver None sin crashear."""
+    """Si no hay servidor, chat() debe devolver None sin crashear."""
     client = LLMClient(base_url="http://localhost:99999")  # puerto imposible
     assert client.is_available() is False
-    assert client.sugerir_tipo_documento("cualquier texto") is None
-    assert client.extraer_entidades("cualquier texto") is None
+    assert client.chat([{"role": "user", "content": "hola"}]) is None
 
 
 def test_limpieza_respuesta_clasificacion():
